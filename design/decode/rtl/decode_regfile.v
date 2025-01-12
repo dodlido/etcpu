@@ -1,4 +1,4 @@
-module regfile_top #(
+module decode_regfile #(
    // Parameters // 
    // ---------- // 
    parameter REGS_PTR_W =  5 , // Register pointers width in bits

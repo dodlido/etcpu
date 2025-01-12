@@ -1,11 +1,5 @@
 package utils_top;
 
-// Register File Dimenstions // 
-// ------------------------- // 
-parameter REG_SIZE   = 32               ; // Register size in [bits]
-parameter REGS_NUM   = 32               ; // Number of registers in regfile
-parameter REGS_PTR_W = $clog2(REGS_NUM) ; // Register pointers size in [bits] 
-
 // OP CODES //
 // -------- //
 parameter bit [7-1:0] OP_LUI    = 7'b0110111 ; // LUI opcode               , U-Type
@@ -46,6 +40,5 @@ parameter bit [4-1:0] ALU_SRLI  = 4'b0101 ; // {func7 , func3[2:0]}
 parameter bit [4-1:0] ALU_SRAI  = 4'b1101 ; // {func7 , func3[2:0]} 
 parameter bit [3-1:0] ALU_ORI   =  3'b110 ; // func3[2:0]
 parameter bit [3-1:0] ALU_ANDI  =  3'b111 ; // func3[2:0]
-// Load and store type are all '+'
 
 endpackage

@@ -10,9 +10,8 @@ module decode_top (
 
    // Write-back Inputs //
    // ----------------- //
-   input  logic          wb_rgf_we , // Regfile write-enable
-   input  logic [05-1:0] wb_rgf_wa , // Regfile write-address
-   input  logic [32-1:0] wb_rgf_wd , // Regfile write-data
+   input  logic [32-1:0] wb_inst   , // writeback instruction
+   input  logic [32-1:0] wb_dat    , // Regfile write-data from writeback
 
    // Fetch Inputs //
    // ------------ //
@@ -26,8 +25,8 @@ module decode_top (
    output logic [32-1:0] ex_addr     // Address for store operations : rd2 
 );
 
-// Imports // 
-// ------- //
+// Import package //
+// -------------- //
 import utils_top::* ; 
 
 // Internal Wires //
@@ -82,13 +81,13 @@ end
 // Register File // 
 // ------------- //
 // Drive RGF inputs //
-assign rgf_we  = wb_rgf_we   ; 
-assign rgf_wa  = wb_rgf_wa   ; 
-assign rgf_wd  = wb_rgf_wd   ; 
-assign rgf_rs1 = inst[19:15] ; 
-assign rgf_rs2 = inst[24:20] ; 
+assign rgf_we  = ~(wb_inst[6:0]==OP_STORE | wb_inst[6:0]==OP_BRANCH) ; 
+assign rgf_wa  = wb_inst[11:7] ; 
+assign rgf_wd  = wb_dat        ; 
+assign rgf_rs1 = inst[19:15]   ; 
+assign rgf_rs2 = inst[24:20]   ; 
 // RGF instance // 
-regfile_top i_regfile_top (
+decode_regfile i_regfile (
    // General // 
    .clk   (clk     ), // i, [1]        X logic  , clock signal
    .rst_n (rst_n   ), // i, [1]        X logic  , async reset. active low
@@ -105,7 +104,7 @@ regfile_top i_regfile_top (
 
 // Drive Execute Outputs // 
 // --------------------- // 
-assign if_inst   =                                                  ex_inst ; 
+assign ex_inst   =                                                  inst    ; 
 assign ex_dat_a  =                                                  rgf_rd1 ;  
 assign ex_dat_b  = (opcode==OP_RR) | (opcode==OP_STORE) ? rgf_rd2 : imm     ; 
 assign ex_addr   =                                                  rgf_rd2 ; 
