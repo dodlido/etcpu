@@ -110,3 +110,12 @@ assign ex_dat_b  = (opcode==OP_RR) | (opcode==OP_STORE) ? rgf_rd2 : imm     ;
 assign ex_addr   =                                                  rgf_rd2 ; 
 
 endmodule
+
+//|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|//
+//|                                               |//
+//| 1. Project  :  etcpu                          |//
+//| 2. Author   :  Etay Sela                      |//
+//| 3. Date     :  2025-01-12                     |//
+//| 4. Version  :  v0.1.0                         |//
+//|                                               |//
+//|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|//

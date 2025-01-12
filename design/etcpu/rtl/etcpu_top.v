@@ -153,3 +153,12 @@ always_ff @(posedge clk) if (!rst_n) ex2ma_addr  <= 0 ; else ex2ma_addr  <= ex2m
 always_ff @(posedge clk) if (!rst_n) ex2ma_dat   <= 0 ; else ex2ma_dat   <= ex2ma_dat_next   ; 
 
 endmodule
+
+//|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|//
+//|                                               |//
+//| 1. Project  :  etcpu                          |//
+//| 2. Author   :  Etay Sela                      |//
+//| 3. Date     :  2025-01-12                     |//
+//| 4. Version  :  v0.1.0                         |//
+//|                                               |//
+//|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|//
