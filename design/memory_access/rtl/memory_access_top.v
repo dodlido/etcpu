@@ -40,12 +40,13 @@ import utils_top::* ;
 
 // Internal Wires //
 // -------------- //
-logic [7-1:0] opcode = ex_inst[6:0]  ; 
+logic [7-1:0] opcode      ; 
 logic         mem_wen_int ; 
 logic         wb_sel_mem  ; 
 
 // Memory write logic //
 // ------------------ //
+assign opcode = ex_inst[6:0] ;
 assign mem_wen_int = opcode==OP_STORE ; // write enable in store instructions only
 
 // WB select logic //
@@ -58,8 +59,8 @@ assign wb_inst = ex_inst ;
 // ---------------- //
 assign mem_cs     = 1'b1        ; 
 assign mem_wen    = mem_wen_int ; 
-assign mem_addr   = ex_addr     ; 
-assign mem_dat_in = ex_dat      ; 
+assign mem_addr   = ex_dat      ; 
+assign mem_dat_in = ex_addr     ; 
 
 endmodule
 

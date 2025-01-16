@@ -104,10 +104,10 @@ decode_regfile i_regfile (
 
 // Drive Execute Outputs // 
 // --------------------- // 
-assign ex_inst   =                                                  inst    ; 
-assign ex_dat_a  =                                                  rgf_rd1 ;  
-assign ex_dat_b  = (opcode==OP_RR) | (opcode==OP_STORE) ? rgf_rd2 : imm     ; 
-assign ex_addr   =                                                  rgf_rd2 ; 
+assign ex_inst   =                             inst    ; 
+assign ex_dat_a  =                             rgf_rd1 ;  
+assign ex_dat_b  = (opcode==OP_RR) ? rgf_rd2 : imm     ; 
+assign ex_addr   =                             rgf_rd2 ; 
 
 endmodule
 

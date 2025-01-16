@@ -39,7 +39,7 @@ generate
    for (REG_IDX=0; REG_IDX<REGS_NUM; REG_IDX++) begin: gen_regfile_loop
       // Write-enable logic per register // 
       // ------------------------------- //
-      assign reg_we_vec[REG_IDX] = we & (wa == REG_IDX[REGS_PTR_W-1:0]) ; 
+      assign reg_we_vec[REG_IDX] = we & (wa == REG_IDX[REGS_PTR_W-1:0]) & (REG_IDX!=0) ; // writing to X0 is diabled
 
       // Register Instance // 
       // ----------------- //
