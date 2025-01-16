@@ -49,43 +49,75 @@ class InstWrDriver(BusDriver):
         self.running_addr = 0 if ((self.running_addr + 4) >> 2) == self.inst_mem_depth else self.running_addr + 4 
         await RisingEdge(self.clock)
         self.bus.wen.value = 0
-
-async def _drive_nops(driver: InstWrDriver, num_of_nops: int):
-    for _ in range(num_of_nops):
-        await driver._driver_send('nop')
-
-# Main test
-@cocotb.test()
-async def basic_test(dut):
     
-    # 0. Initialize test
-    # Declare driver 
-    inst_driver = InstWrDriver(dut, 'inst_mem_wr', dut.clk, 256)
-    # Start clock
-    await cocotb.start(Clock(dut.clk, 1, 'ns').start())
-    # Reset to CPU, hold it active for a long time
-    cpu_rst = cocotb.start_soon(reset_dut(dut.clk, dut.rst_n_cpu, 300))
-    # Wait for environment reset to complete
-    await cocotb.start_soon(reset_dut(dut.clk, dut.rst_n_env, 10))
+    async def _load_nops(self, num_of_nops: int):
+        '''
+            use num_of_nops=-1 to load the 
+            entire instruction memory with nops
+        '''
+        if num_of_nops == -1:
+            num_of_nops == self.inst_mem_depth
+        for _ in range(num_of_nops):
+            await self._driver_send('nop')
 
-    # 1. Fill instruction memory with NOPS
-    for _ in range(inst_driver.inst_mem_depth):
-        await inst_driver._driver_send('nop')
-
-    # 2. Write Instructions 
+async def basic_test(inst_driver: InstWrDriver):
+    '''
+    basic test:
+        1. addi x1, x0, 7 
+        2. addi x2, x0, 4
+        3. sub  x3, x1, x2
+        4. sw x3, 4(x2)
+        5. lw x4, 4(x2)  
+    '''
     await inst_driver._driver_send('addi x1, x0, 7')
     await inst_driver._driver_send('addi x2, x0, 4')
-    await _drive_nops(inst_driver, 5)
+    await inst_driver._load_nops(5)
     await inst_driver._driver_send('sub x3, x1, x2')
-    await _drive_nops(inst_driver, 5)
+    await inst_driver._load_nops(5)
     await inst_driver._driver_send('sw x3, 4(x2)')
-    await _drive_nops(inst_driver, 5)
+    await inst_driver._load_nops(5)
     await inst_driver._driver_send('lw x4, 4(x2)')
 
-    # 3. Wait for CPU reset to end
+async def test_data_hazard(inst_driver: InstWrDriver):
+    '''
+    test RAW data hazard case:
+        1. addi x1, x0, 7 
+        2. addi x1, x1, 4
+    '''
+    await inst_driver._driver_send('addi x1, x0, 7')
+    await inst_driver._driver_send('addi x1, x1, 4')
+
+@cocotb.test()
+async def test_wrapper(dut):
+    
+    # 1. Declare driver 
+    inst_driver = InstWrDriver(dut, 'inst_mem_wr', dut.clk, 256)
+    
+    # 2. Start clock
+    await cocotb.start(Clock(dut.clk, 1, 'ns').start())
+    
+    # 3. Reset to CPU, hold it active for a long time
+    cpu_rst = cocotb.start_soon(reset_dut(dut.clk, dut.rst_n_cpu, int(1.2*inst_driver.inst_mem_depth)))
+    
+    # 4. Wait for environment reset to complete
+    await cocotb.start_soon(reset_dut(dut.clk, dut.rst_n_env, 10))
+
+    # 5. Fill instruction memory with NOPS
+    await inst_driver._load_nops(-1)
+
+    ######################################
+    ########### Test Case Here ###########
+    ######################################
+    await test_data_hazard(inst_driver)
+    ######################################
+    ########### Test Case Ends ###########
+    ######################################
+
+    # 6. Wait for CPU reset to end
     await cpu_rst
 
-    # 4. Wait some cycles for instruction to occur
+    # 7. Wait some cycles for instruction to occur
     for _ in range(64):
         await RisingEdge(dut.clk)
+
     

@@ -8,21 +8,32 @@ module decode_top (
    input  logic          clk        , // clock signal
    input  logic          rst_n      , // active low reset
 
+   // Data Forwarding //
+   // --------------- //
+   // execute // 
+   input  logic          ex_fwd_we  , // Forwarded write-enable signal
+   input  logic [ 5-1:0] ex_fwd_dst , // Forwarded pointer to destination register
+   input  logic [32-1:0] ex_fwd_dat , // Forwarded data from ALU output
+   // memory access //
+   input  logic          ma_fwd_we  , // Forwarded write-enable signal
+   input  logic [ 5-1:0] ma_fwd_dst , // Forwarded pointer to destination register
+   input  logic [32-1:0] ma_fwd_dat , // Forwarded data from memory access phase
+
    // Write-back Inputs //
    // ----------------- //
-   input  logic [32-1:0] wb_inst   , // writeback instruction
-   input  logic [32-1:0] wb_dat    , // Regfile write-data from writeback
+   input  logic [32-1:0] wb_inst    , // writeback instruction
+   input  logic [32-1:0] wb_dat     , // Regfile write-data from writeback
 
    // Fetch Inputs //
    // ------------ //
-   input  logic [32-1:0] if_inst   , // Input instruction 
+   input  logic [32-1:0] if_inst    , // Input instruction 
 
    // Execute Outputs // 
    // --------------- //
-   output logic [32-1:0] ex_inst   , // Output instruction 
-   output logic [32-1:0] ex_dat_a  , // Output A : rd1 
-   output logic [32-1:0] ex_dat_b  , // Output B : rd2 or immediate 
-   output logic [32-1:0] ex_addr     // Address for store operations : rd2 
+   output logic [32-1:0] ex_inst    , // Output instruction 
+   output logic [32-1:0] ex_dat_a   , // Output A : rd1 
+   output logic [32-1:0] ex_dat_b   , // Output B : rd2 or immediate 
+   output logic [32-1:0] ex_rd2       // rd2 
 );
 
 // Import package //
@@ -32,23 +43,37 @@ import utils_top::* ;
 // Internal Wires //
 // -------------- //
 // Immediate assembly //
-logic [32-1:0] inst    ; // input instruction 
-logic [32-1:0] i_imm   ; // I-type immediate
-logic [32-1:0] s_imm   ; // S-type immediate
-logic [32-1:0] b_imm   ; // B-type immediate
-logic [32-1:0] u_imm   ; // U-type immediate
-logic [32-1:0] j_imm   ; // J-type immediate
-// Immediate select //
-logic [ 7-1:0] opcode  ; // opcode
-logic [32-1:0] imm     ; // immediate
+logic [32-1:0] inst           ; // input instruction 
+logic [32-1:0] i_imm          ; // I-type immediate
+logic [32-1:0] s_imm          ; // S-type immediate
+logic [32-1:0] b_imm          ; // B-type immediate
+logic [32-1:0] u_imm          ; // U-type immediate
+logic [32-1:0] j_imm          ; // J-type immediate
+// Immediate select //        
+logic [ 7-1:0] opcode         ; // opcode
+logic [32-1:0] imm            ; // immediate
 // Register File // 
-logic          rgf_we  ; // Register File, write-enable 
-logic [05-1:0] rgf_wa  ; // Register File, write-address
-logic [32-1:0] rgf_wd  ; // Register File, write-data
-logic [05-1:0] rgf_rs1 ; // Register File, read port #1 address 
-logic [05-1:0] rgf_rs2 ; // Register File, read port #2 address 
-logic [32-1:0] rgf_rd1 ; // Register File, read port #1 data
-logic [32-1:0] rgf_rd2 ; // Register File, read port #2 data
+logic          rgf_we         ; // Register File, write-enable 
+logic [05-1:0] rgf_wa         ; // Register File, write-address
+logic [32-1:0] rgf_wd         ; // Register File, write-data
+logic [05-1:0] rgf_rs1        ; // Register File, read port #1 address 
+logic [05-1:0] rgf_rs2        ; // Register File, read port #2 address 
+logic [32-1:0] rgf_rd1        ; // Register File, read port #1 data
+logic [32-1:0] rgf_rd2        ; // Register File, read port #2 data
+logic [32-1:0] fwd_rd1        ; // Register File, read port #1 data
+logic [32-1:0] fwd_rd2        ; // Register File, read port #2 data
+// data forwarding //
+logic [32-1:0] wb_fwd_dat     ; 
+logic [05-1:0] wb_fwd_dst     ; 
+logic          wb_fwd_we      ; 
+logic          fwd_rd1_ex_sel ;
+logic          fwd_rd1_ma_sel ;
+logic          fwd_rd1_wb_sel ;
+logic          fwd_rd1_no_fwd ;  
+logic          fwd_rd2_ex_sel ;
+logic          fwd_rd2_ma_sel ;
+logic          fwd_rd2_wb_sel ;
+logic          fwd_rd2_no_fwd ;  
 
 // Immediate assembly unit // 
 // ----------------------- //
@@ -102,12 +127,31 @@ decode_regfile i_regfile (
    .rd2   (rgf_rd2 )  // o, REG_SIZE   X logic  , data read port #2
 );
 
+// Data Forwarding //
+// --------------- //
+// writeback decoding //
+assign wb_fwd_we  = rgf_we ; 
+assign wb_fwd_dst = rgf_wa ; 
+assign wb_fwd_dat = rgf_wd ; 
+// MUXs control logic // 
+assign fwd_rd1_ex_sel = ex_fwd_we & ex_fwd_dst==rgf_rs1 ; 
+assign fwd_rd1_ma_sel = ma_fwd_we & ma_fwd_dst==rgf_rs1 & ~fwd_rd1_ex_sel ; 
+assign fwd_rd1_wb_sel = wb_fwd_we & wb_fwd_dst==rgf_rs1 & ~fwd_rd1_ex_sel & ~fwd_rd1_ma_sel ; 
+assign fwd_rd1_no_fwd = ~fwd_rd1_ex_sel & ~fwd_rd1_ma_sel & ~fwd_rd1_wb_sel ;  
+assign fwd_rd2_ex_sel = ex_fwd_we & ex_fwd_dst==rgf_rs2 ; 
+assign fwd_rd2_ma_sel = ma_fwd_we & ma_fwd_dst==rgf_rs2 & ~fwd_rd2_ex_sel ; 
+assign fwd_rd2_wb_sel = wb_fwd_we & wb_fwd_dst==rgf_rs2 & ~fwd_rd2_ex_sel & ~fwd_rd2_ma_sel ; 
+assign fwd_rd2_no_fwd = ~fwd_rd2_ex_sel & ~fwd_rd2_ma_sel & ~fwd_rd2_wb_sel ;  
+// MUX logic // 
+assign fwd_rd1 = ({32{fwd_rd1_ex_sel}} & ex_fwd_dat) | ({32{fwd_rd1_ma_sel}} & ma_fwd_dat) | ({32{fwd_rd1_wb_sel}} & wb_fwd_dat) | ({32{fwd_rd1_no_fwd}} & rgf_rd1) ; 
+assign fwd_rd2 = ({32{fwd_rd2_ex_sel}} & ex_fwd_dat) | ({32{fwd_rd2_ma_sel}} & ma_fwd_dat) | ({32{fwd_rd2_wb_sel}} & wb_fwd_dat) | ({32{fwd_rd2_no_fwd}} & rgf_rd2) ; 
+
 // Drive Execute Outputs // 
 // --------------------- // 
 assign ex_inst   =                             inst    ; 
-assign ex_dat_a  =                             rgf_rd1 ;  
-assign ex_dat_b  = (opcode==OP_RR) ? rgf_rd2 : imm     ; 
-assign ex_addr   =                             rgf_rd2 ; 
+assign ex_dat_a  =                             fwd_rd1 ;  
+assign ex_dat_b  = (opcode==OP_RR) ? fwd_rd2 : imm     ; 
+assign ex_rd2    =                             fwd_rd2 ; 
 
 endmodule
 
