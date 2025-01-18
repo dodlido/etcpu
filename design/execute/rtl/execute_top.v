@@ -16,6 +16,10 @@ module execute_top (
    output logic [ 5-1:0] id_fwd_dst , // Forwarded pointer to destination register
    output logic [32-1:0] id_fwd_dat , // Forwarded data from ALU output
 
+   // Output load condition to bubble //
+   // ------------------------------- //
+   output logic          ex_load    , // Execute instruction is a load, active high
+
    // Memory Access Outputs // 
    // --------------------- //
    output logic [32-1:0] ma_inst    , // Output instruction 
@@ -46,6 +50,7 @@ assign id_fwd_dat = ma_dat ;
 
 // Drive outputs //
 // ------------- //
+assign ex_load = ex_inst[6:0]==OP_LOAD ; 
 assign ma_rd2  = ex_rd2  ; 
 assign ma_inst = ex_inst ; 
 

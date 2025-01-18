@@ -58,6 +58,9 @@ logic          ex2id_fwd_we     ;
 logic [32-1:0] ma2id_fwd_dat    ;
 logic [05-1:0] ma2id_fwd_dst    ;
 logic          ma2id_fwd_we     ;
+// BUBBLE ID --> IR, PC //
+logic          ex_load          ;
+logic          bubble           ;
 
 // Internal Registers //
 // ------------------ //
@@ -112,6 +115,9 @@ decode_top i_decode_top (
    .wb_dat     (ma2wb_dat        ), // i, 32  X logic  , Regfile write-data from writeback
    // Fetch Inputs //
    .if_inst    (if2id_inst       ), // i, 32  X logic  , Input instruction
+   // Pipe interlock bubble //
+   .ex_load    (ex_load          ), // i, [1] X logic  , execute instruction is LOAD
+   .bubble     (bubble           ), // o, [1] X logic  , bubble due to pipe interlock                
    // Execute Outputs // 
    .ex_inst    (id2ex_inst_next  ), // o, 32  X logic  , Output instruction
    .ex_dat_a   (id2ex_dat_a_next ), // o, 32  X logic  , Output A : rd1
@@ -131,6 +137,8 @@ execute_top i_execute_top (
    .id_fwd_we  (ex2id_fwd_we     ), // i, [1] X logic  , forwarded write enable from execute stage
    .id_fwd_dst (ex2id_fwd_dst    ), // i,  5  X logic  , forwarded destination register from execute stage
    .id_fwd_dat (ex2id_fwd_dat    ), // i, 32  X logic  , forwarded data from execute stage
+   // Pipe interlock bubble //
+   .ex_load    (ex_load          ), // o, [1] X logic  , execute instruction is LOAD
    // Memory Access Outputs // 
    .ma_inst    (ex2ma_inst_next  ), // o, 32 X logic  , Output instruction
    .ma_dat     (ex2ma_dat_next   ), // o, 32 X logic  , ALU output data
@@ -164,17 +172,17 @@ memory_access_top i_memory_access_top (
 
 // FFs // 
 // --- //
-always_ff @(posedge clk) if (!rst_n) pc          <= 0 ; else pc          <= pc_next          ; 
-always_ff @(posedge clk) if (!rst_n) if2id_inst  <= 0 ; else if2id_inst  <= if2id_inst_next  ; 
-always_ff @(posedge clk) if (!rst_n) ma2wb_inst  <= 0 ; else ma2wb_inst  <= ma2wb_inst_next  ; 
-always_ff @(posedge clk) if (!rst_n) ma2wb_dat   <= 0 ; else ma2wb_dat   <= ma2wb_dat_next   ; 
-always_ff @(posedge clk) if (!rst_n) id2ex_inst  <= 0 ; else id2ex_inst  <= id2ex_inst_next  ; 
-always_ff @(posedge clk) if (!rst_n) id2ex_dat_a <= 0 ; else id2ex_dat_a <= id2ex_dat_a_next ; 
-always_ff @(posedge clk) if (!rst_n) id2ex_dat_b <= 0 ; else id2ex_dat_b <= id2ex_dat_b_next ; 
-always_ff @(posedge clk) if (!rst_n) id2ex_rd2   <= 0 ; else id2ex_rd2   <= id2ex_rd2_next   ; 
-always_ff @(posedge clk) if (!rst_n) ex2ma_inst  <= 0 ; else ex2ma_inst  <= ex2ma_inst_next  ; 
-always_ff @(posedge clk) if (!rst_n) ex2ma_rd2   <= 0 ; else ex2ma_rd2   <= ex2ma_rd2_next   ; 
-always_ff @(posedge clk) if (!rst_n) ex2ma_dat   <= 0 ; else ex2ma_dat   <= ex2ma_dat_next   ; 
+always_ff @(posedge clk) if (!rst_n) pc          <= 0 ; else if (bubble) pc         <= pc         ; else pc          <= pc_next          ; 
+always_ff @(posedge clk) if (!rst_n) if2id_inst  <= 0 ; else if (bubble) if2id_inst <= if2id_inst ; else if2id_inst  <= if2id_inst_next  ; 
+always_ff @(posedge clk) if (!rst_n) ma2wb_inst  <= 0 ;                                             else ma2wb_inst  <= ma2wb_inst_next  ; 
+always_ff @(posedge clk) if (!rst_n) ma2wb_dat   <= 0 ;                                             else ma2wb_dat   <= ma2wb_dat_next   ; 
+always_ff @(posedge clk) if (!rst_n) id2ex_inst  <= 0 ;                                             else id2ex_inst  <= id2ex_inst_next  ; 
+always_ff @(posedge clk) if (!rst_n) id2ex_dat_a <= 0 ;                                             else id2ex_dat_a <= id2ex_dat_a_next ; 
+always_ff @(posedge clk) if (!rst_n) id2ex_dat_b <= 0 ;                                             else id2ex_dat_b <= id2ex_dat_b_next ; 
+always_ff @(posedge clk) if (!rst_n) id2ex_rd2   <= 0 ;                                             else id2ex_rd2   <= id2ex_rd2_next   ; 
+always_ff @(posedge clk) if (!rst_n) ex2ma_inst  <= 0 ;                                             else ex2ma_inst  <= ex2ma_inst_next  ; 
+always_ff @(posedge clk) if (!rst_n) ex2ma_rd2   <= 0 ;                                             else ex2ma_rd2   <= ex2ma_rd2_next   ; 
+always_ff @(posedge clk) if (!rst_n) ex2ma_dat   <= 0 ;                                             else ex2ma_dat   <= ex2ma_dat_next   ; 
 
 endmodule
 

@@ -28,6 +28,11 @@ module decode_top (
    // ------------ //
    input  logic [32-1:0] if_inst    , // Input instruction 
 
+   // Pipe interlock bubble //
+   // --------------------- //
+   input  logic          ex_load    , // current execute opcode is load
+   output logic          bubble     , // bubble due to pipe interlock 
+
    // Execute Outputs // 
    // --------------- //
    output logic [32-1:0] ex_inst    , // Output instruction 
@@ -56,6 +61,8 @@ logic [32-1:0] imm            ; // immediate
 logic          rgf_we         ; // Register File, write-enable 
 logic [05-1:0] rgf_wa         ; // Register File, write-address
 logic [32-1:0] rgf_wd         ; // Register File, write-data
+logic          rd1_re         ; // Register File, read port #1 read-enable
+logic          rd2_re         ; // Register File, read port #2 read-enable 
 logic [05-1:0] rgf_rs1        ; // Register File, read port #1 address 
 logic [05-1:0] rgf_rs2        ; // Register File, read port #2 address 
 logic [32-1:0] rgf_rd1        ; // Register File, read port #1 data
@@ -133,18 +140,25 @@ decode_regfile i_regfile (
 assign wb_fwd_we  = rgf_we ; 
 assign wb_fwd_dst = rgf_wa ; 
 assign wb_fwd_dat = rgf_wd ; 
+// Register file read enable signals //
+assign rd1_re = opcode==OP_IMM | opcode==OP_RR | opcode==OP_LOAD | opcode==OP_STORE | opcode==OP_JALR | opcode==OP_BRANCH ; 
+assign rd2_re =                  opcode==OP_RR                   | opcode==OP_STORE                   | opcode==OP_BRANCH ; 
 // MUXs control logic // 
-assign fwd_rd1_ex_sel = ex_fwd_we & ex_fwd_dst==rgf_rs1 ; 
-assign fwd_rd1_ma_sel = ma_fwd_we & ma_fwd_dst==rgf_rs1 & ~fwd_rd1_ex_sel ; 
-assign fwd_rd1_wb_sel = wb_fwd_we & wb_fwd_dst==rgf_rs1 & ~fwd_rd1_ex_sel & ~fwd_rd1_ma_sel ; 
+assign fwd_rd1_ex_sel = ex_fwd_we & ex_fwd_dst!=5'h0 & rd1_re & ex_fwd_dst==rgf_rs1 ; 
+assign fwd_rd1_ma_sel = ma_fwd_we & ma_fwd_dst!=5'h0 & rd1_re & ma_fwd_dst==rgf_rs1 & ~fwd_rd1_ex_sel ; 
+assign fwd_rd1_wb_sel = wb_fwd_we & wb_fwd_dst!=5'h0 & rd1_re & wb_fwd_dst==rgf_rs1 & ~fwd_rd1_ex_sel & ~fwd_rd1_ma_sel ; 
 assign fwd_rd1_no_fwd = ~fwd_rd1_ex_sel & ~fwd_rd1_ma_sel & ~fwd_rd1_wb_sel ;  
-assign fwd_rd2_ex_sel = ex_fwd_we & ex_fwd_dst==rgf_rs2 ; 
-assign fwd_rd2_ma_sel = ma_fwd_we & ma_fwd_dst==rgf_rs2 & ~fwd_rd2_ex_sel ; 
-assign fwd_rd2_wb_sel = wb_fwd_we & wb_fwd_dst==rgf_rs2 & ~fwd_rd2_ex_sel & ~fwd_rd2_ma_sel ; 
+assign fwd_rd2_ex_sel = ex_fwd_we & ex_fwd_dst!=5'h0 & rd2_re & ex_fwd_dst==rgf_rs2 ; 
+assign fwd_rd2_ma_sel = ma_fwd_we & ma_fwd_dst!=5'h0 & rd2_re & ma_fwd_dst==rgf_rs2 & ~fwd_rd2_ex_sel ; 
+assign fwd_rd2_wb_sel = wb_fwd_we & wb_fwd_dst!=5'h0 & rd2_re & wb_fwd_dst==rgf_rs2 & ~fwd_rd2_ex_sel & ~fwd_rd2_ma_sel ; 
 assign fwd_rd2_no_fwd = ~fwd_rd2_ex_sel & ~fwd_rd2_ma_sel & ~fwd_rd2_wb_sel ;  
 // MUX logic // 
 assign fwd_rd1 = ({32{fwd_rd1_ex_sel}} & ex_fwd_dat) | ({32{fwd_rd1_ma_sel}} & ma_fwd_dat) | ({32{fwd_rd1_wb_sel}} & wb_fwd_dat) | ({32{fwd_rd1_no_fwd}} & rgf_rd1) ; 
 assign fwd_rd2 = ({32{fwd_rd2_ex_sel}} & ex_fwd_dat) | ({32{fwd_rd2_ma_sel}} & ma_fwd_dat) | ({32{fwd_rd2_wb_sel}} & wb_fwd_dat) | ({32{fwd_rd2_no_fwd}} & rgf_rd2) ; 
+
+// Derive Bubble signal //
+// -------------------- //
+assign bubble = ex_load & (ex_fwd_dst!=5'h0) & ((rd1_re & ex_fwd_dst==rgf_rs1) | (rd2_re & ex_fwd_dst==rgf_rs2)) ; 
 
 // Drive Execute Outputs // 
 // --------------------- // 
