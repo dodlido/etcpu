@@ -123,7 +123,7 @@ async def test_wrapper(dut):
     ######################################
     ########### Test Case Here ###########
     ######################################
-    await test_data_hazard(inst_driver)
+    await test_interlock_scenario(inst_driver)
     ######################################
     ########### Test Case Ends ###########
     ######################################

@@ -5,40 +5,48 @@
 module decode_top ( 
    // General Signals //
    // --------------- //
-   input  logic          clk        , // clock signal
-   input  logic          rst_n      , // active low reset
+   input  logic          clk             , // clock signal
+   input  logic          rst_n           , // active low reset
 
    // Data Forwarding //
    // --------------- //
    // execute // 
-   input  logic          ex_fwd_we  , // Forwarded write-enable signal
-   input  logic [ 5-1:0] ex_fwd_dst , // Forwarded pointer to destination register
-   input  logic [32-1:0] ex_fwd_dat , // Forwarded data from ALU output
+   input  logic          ex_fwd_we       , // Forwarded write-enable signal
+   input  logic [ 5-1:0] ex_fwd_dst      , // Forwarded pointer to destination register
+   input  logic [32-1:0] ex_fwd_dat      , // Forwarded data from ALU output
    // memory access //
-   input  logic          ma_fwd_we  , // Forwarded write-enable signal
-   input  logic [ 5-1:0] ma_fwd_dst , // Forwarded pointer to destination register
-   input  logic [32-1:0] ma_fwd_dat , // Forwarded data from memory access phase
+   input  logic          ma_fwd_we       , // Forwarded write-enable signal
+   input  logic [ 5-1:0] ma_fwd_dst      , // Forwarded pointer to destination register
+   input  logic [32-1:0] ma_fwd_dat      , // Forwarded data from memory access phase
+
+   // Branch IF //
+   // --------- //
+   input  logic          if_branch_taken , // Branch taken by Fetcher branch prediction
+   input  logic [32-1:0] if_branch_nt_pc , // non-taken branch PC 
+   output logic          ex_branch_taken , // Branch taken by Fetcher branch prediction
+   output logic [32-1:0] ex_branch_nt_pc , // non-taken branch PC 
+   input  logic          ex_branch_flush , // Branch flush indicator from execute stage
 
    // Write-back Inputs //
    // ----------------- //
-   input  logic [32-1:0] wb_inst    , // writeback instruction
-   input  logic [32-1:0] wb_dat     , // Regfile write-data from writeback
+   input  logic [32-1:0] wb_inst         , // writeback instruction
+   input  logic [32-1:0] wb_dat          , // Regfile write-data from writeback
 
    // Fetch Inputs //
    // ------------ //
-   input  logic [32-1:0] if_inst    , // Input instruction 
+   input  logic [32-1:0] if_inst         , // Input instruction 
 
    // Pipe interlock bubble //
    // --------------------- //
-   input  logic          ex_load    , // current execute opcode is load
-   output logic          bubble     , // bubble due to pipe interlock 
+   input  logic          ex_load         , // current execute opcode is load
+   output logic          intrlock_bubble , // bubble due to pipe interlock 
 
    // Execute Outputs // 
    // --------------- //
-   output logic [32-1:0] ex_inst    , // Output instruction 
-   output logic [32-1:0] ex_dat_a   , // Output A : rd1 
-   output logic [32-1:0] ex_dat_b   , // Output B : rd2 or immediate 
-   output logic [32-1:0] ex_rd2       // rd2 
+   output logic [32-1:0] ex_inst         , // Output instruction 
+   output logic [32-1:0] ex_dat_a        , // Output A : rd1 
+   output logic [32-1:0] ex_dat_b        , // Output B : rd2 or immediate 
+   output logic [32-1:0] ex_rd2            // rd2 
 );
 
 // Import package //
@@ -158,14 +166,19 @@ assign fwd_rd2 = ({32{fwd_rd2_ex_sel}} & ex_fwd_dat) | ({32{fwd_rd2_ma_sel}} & m
 
 // Derive Bubble signal //
 // -------------------- //
-assign bubble = ex_load & (ex_fwd_dst!=5'h0) & ((rd1_re & ex_fwd_dst==rgf_rs1) | (rd2_re & ex_fwd_dst==rgf_rs2)) ; 
+assign intrlock_bubble = ex_load & (ex_fwd_dst!=5'h0) & ((rd1_re & ex_fwd_dst==rgf_rs1) | (rd2_re & ex_fwd_dst==rgf_rs2)) ; 
 
 // Drive Execute Outputs // 
 // --------------------- // 
-assign ex_inst   =                             inst    ; 
+assign ex_inst   = ex_branch_flush ? BUBBLE  : inst    ; 
 assign ex_dat_a  =                             fwd_rd1 ;  
 assign ex_dat_b  = (opcode==OP_RR) ? fwd_rd2 : imm     ; 
 assign ex_rd2    =                             fwd_rd2 ; 
+
+// Propagate branch IF //
+// ------------------- //
+assign ex_branch_taken = if_branch_taken ; 
+assign ex_branch_nt_pc = if_branch_nt_pc ; 
 
 endmodule
 

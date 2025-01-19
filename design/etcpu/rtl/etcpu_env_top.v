@@ -96,9 +96,4 @@ gen_sp_reg_mem_top #(
    .dat_out (main_mem_dat_out     )  // o, DAT_W X logic  , Output data
 );
 
-
-initial begin
-   $dumpfile("dump.vcd");
-   $dumpvars(0, etcpu_env_top);
-end
 endmodule

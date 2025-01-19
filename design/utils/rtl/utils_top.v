@@ -41,6 +41,9 @@ parameter bit [4-1:0] ALU_SRAI  = 4'b1101 ; // {func7 , func3[2:0]}
 parameter bit [3-1:0] ALU_ORI   =  3'b110 ; // func3[2:0]
 parameter bit [3-1:0] ALU_ANDI  =  3'b111 ; // func3[2:0]
 
+// Bubble //
+parameter bit [32-1:0] BUBBLE = 32'h33 ; // Bubble operation  
+
 endpackage
 
 //|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|//

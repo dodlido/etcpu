@@ -35,114 +35,144 @@ module etcpu_top (
 // Internal Wires //
 // -------------- //
 // IF --> IF // 
-logic [32-1:0] pc_next          ; 
+logic [32-1:0] pc_next                 ; 
 // IF --> ID //
-logic [32-1:0] if2id_inst_next  ; 
+logic [32-1:0] if2id_inst_next         ; 
 // MA --> WB // 
-logic [32-1:0] ma2wb_inst_next  ;
-logic [32-1:0] ma2wb_dat_next   ;
+logic [32-1:0] ma2wb_inst_next         ;
+logic [32-1:0] ma2wb_dat_next          ;
 // ID --> EX //
-logic [32-1:0] id2ex_inst_next  ; 
-logic [32-1:0] id2ex_dat_a_next ;
-logic [32-1:0] id2ex_dat_b_next ;
-logic [32-1:0] id2ex_rd2_next   ;
+logic [32-1:0] id2ex_inst_next         ; 
+logic [32-1:0] id2ex_dat_a_next        ;
+logic [32-1:0] id2ex_dat_b_next        ;
+logic [32-1:0] id2ex_rd2_next          ;
 // EX --> MA //
-logic [32-1:0] ex2ma_inst_next  ;
-logic [32-1:0] ex2ma_rd2_next   ;
-logic [32-1:0] ex2ma_dat_next   ;
+logic [32-1:0] ex2ma_inst_next         ;
+logic [32-1:0] ex2ma_rd2_next          ;
+logic [32-1:0] ex2ma_dat_next          ;
 // FWD EX --> ID // 
-logic [32-1:0] ex2id_fwd_dat    ;
-logic [05-1:0] ex2id_fwd_dst    ;
-logic          ex2id_fwd_we     ;
+logic [32-1:0] ex2id_fwd_dat           ;
+logic [05-1:0] ex2id_fwd_dst           ;
+logic          ex2id_fwd_we            ;
 // FWD MA --> ID // 
-logic [32-1:0] ma2id_fwd_dat    ;
-logic [05-1:0] ma2id_fwd_dst    ;
-logic          ma2id_fwd_we     ;
+logic [32-1:0] ma2id_fwd_dat           ;
+logic [05-1:0] ma2id_fwd_dst           ;
+logic          ma2id_fwd_we            ;
 // BUBBLE ID --> IR, PC //
-logic          ex_load          ;
-logic          bubble           ;
+logic          ex_load                 ;
+logic          intrlock_bubble         ;
+// Pipe Flush //
+logic          branch_flush            ;
+logic [32-1:0] branch_flush_pc         ;
+logic          if2id_branch_taken_next ; 
+logic [32-1:0] if2id_branch_nt_pc_next ; 
+logic          id2ex_branch_taken_next ; 
+logic [32-1:0] id2ex_branch_nt_pc_next ; 
 
 // Internal Registers //
 // ------------------ //
 // IF --> IF // 
-logic [32-1:0] pc            ; 
+logic [32-1:0] pc                 ; 
 // IF --> ID //
-logic [32-1:0] if2id_inst    ; 
+logic [32-1:0] if2id_inst         ; 
 // MA --> WB // 
-logic [32-1:0] ma2wb_inst    ;
-logic [32-1:0] ma2wb_dat     ;
+logic [32-1:0] ma2wb_inst         ;
+logic [32-1:0] ma2wb_dat          ;
 // ID --> EX //
-logic [32-1:0] id2ex_inst    ; 
-logic [32-1:0] id2ex_dat_a   ;
-logic [32-1:0] id2ex_dat_b   ;
-logic [32-1:0] id2ex_rd2     ;
+logic [32-1:0] id2ex_inst         ; 
+logic [32-1:0] id2ex_dat_a        ;
+logic [32-1:0] id2ex_dat_b        ;
+logic [32-1:0] id2ex_rd2          ;
 // EX --> MA //
-logic [32-1:0] ex2ma_inst    ;
-logic [32-1:0] ex2ma_rd2     ;
-logic [32-1:0] ex2ma_dat     ;
+logic [32-1:0] ex2ma_inst         ;
+logic [32-1:0] ex2ma_rd2          ;
+logic [32-1:0] ex2ma_dat          ;
+// Pipe Flush //
+logic          if2id_branch_taken ; 
+logic [32-1:0] if2id_branch_nt_pc ; 
+logic          id2ex_branch_taken ; 
+logic [32-1:0] id2ex_branch_nt_pc ; 
 
 // Fetch Stage // 
 // ----------- //
 fetch_top i_fetch_top (
    // Program Counter Register // 
-   .pc          (pc              ), // i, 32  X logic  , Program counter value
-   .pc_next     (pc_next         ), // o, 32  X logic  , Program counter next value
+   .pc              (pc                      ), // i, 32  X logic  , Program counter value
+   .pc_next         (pc_next                 ), // o, 32  X logic  , Program counter next value
    // Instruction Register // 
-   .id_inst     (if2id_inst_next ), // o, 32  X logic  , Decode stage instruction
+   .id_inst         (if2id_inst_next         ), // o, 32  X logic  , Decode stage instruction
+   // Pipe interlock bubble //
+   .intrlock_bubble (intrlock_bubble         ), // i, [1] X logic  , bubble due to pipe interlock                
+   // Branch Flush IF //
+   .id_branch_taken (if2id_branch_taken_next ),
+   .id_branch_nt_pc (if2id_branch_nt_pc_next ),
+   .ex_branch_flush (branch_flush            ),
+   .ex_branch_pc    (branch_flush_pc         ),
    // ------------------------ Memory Interface ----------------------- // 
    // Input control // 
-   .mem_addr    (inst_mem_addr   ), // o, 32  X logic  , Address
+   .mem_addr        (inst_mem_addr           ), // o, 32  X logic  , Address
    // Output data // 
-   .mem_dat_out (inst_mem_dat_out)  // i, 32  X logic  , Output data (from memory POV)
+   .mem_dat_out     (inst_mem_dat_out        )  // i, 32  X logic  , Output data (from memory POV)
 );
 
 // Decode Stage //
 // ------------ //
 decode_top i_decode_top (
    // General Signals //
-   .clk        (clk              ), // i, [1] X logic  , clock signal
-   .rst_n      (rst_n            ), // i, [1] X logic  , active low reset
+   .clk             (clk                     ), // i, [1] X logic  , clock signal
+   .rst_n           (rst_n                   ), // i, [1] X logic  , active low reset
    // Execute Forwarding //
-   .ex_fwd_we  (ex2id_fwd_we     ), // i, [1] X logic  , forwarded write enable from execute stage
-   .ex_fwd_dst (ex2id_fwd_dst    ), // i,  5  X logic  , forwarded destination register from execute stage
-   .ex_fwd_dat (ex2id_fwd_dat    ), // i, 32  X logic  , forwarded data from execute stage
+   .ex_fwd_we       (ex2id_fwd_we            ), // i, [1] X logic  , forwarded write enable from execute stage
+   .ex_fwd_dst      (ex2id_fwd_dst           ), // i,  5  X logic  , forwarded destination register from execute stage
+   .ex_fwd_dat      (ex2id_fwd_dat           ), // i, 32  X logic  , forwarded data from execute stage
    // Memory Access Forwarding //
-   .ma_fwd_we  (ma2id_fwd_we     ), // i, [1] X logic  , forwarded write enable from memory access stage
-   .ma_fwd_dst (ma2id_fwd_dst    ), // i,  5  X logic  , forwarded destination register from memory access stage
-   .ma_fwd_dat (ma2id_fwd_dat    ), // i, 32  X logic  , forwarded data from memory access stage
+   .ma_fwd_we       (ma2id_fwd_we            ), // i, [1] X logic  , forwarded write enable from memory access stage
+   .ma_fwd_dst      (ma2id_fwd_dst           ), // i,  5  X logic  , forwarded destination register from memory access stage
+   .ma_fwd_dat      (ma2id_fwd_dat           ), // i, 32  X logic  , forwarded data from memory access stage
    // Write-back Inputs //
-   .wb_inst    (ma2wb_inst       ), // i, 32  X logic  , writeback instruction
-   .wb_dat     (ma2wb_dat        ), // i, 32  X logic  , Regfile write-data from writeback
+   .wb_inst         (ma2wb_inst              ), // i, 32  X logic  , writeback instruction
+   .wb_dat          (ma2wb_dat               ), // i, 32  X logic  , Regfile write-data from writeback
    // Fetch Inputs //
-   .if_inst    (if2id_inst       ), // i, 32  X logic  , Input instruction
+   .if_inst         (if2id_inst              ), // i, 32  X logic  , Input instruction
    // Pipe interlock bubble //
-   .ex_load    (ex_load          ), // i, [1] X logic  , execute instruction is LOAD
-   .bubble     (bubble           ), // o, [1] X logic  , bubble due to pipe interlock                
+   .ex_load         (ex_load                 ), // i, [1] X logic  , execute instruction is LOAD
+   .intrlock_bubble (intrlock_bubble         ), // o, [1] X logic  , bubble due to pipe interlock                
+   // Branch Flush IF //
+   .if_branch_taken (if2id_branch_taken      ),
+   .if_branch_nt_pc (if2id_branch_nt_pc      ),
+   .ex_branch_taken (id2ex_branch_taken_next ),
+   .ex_branch_nt_pc (id2ex_branch_nt_pc_next ),
+   .ex_branch_flush (branch_flush            ),
    // Execute Outputs // 
-   .ex_inst    (id2ex_inst_next  ), // o, 32  X logic  , Output instruction
-   .ex_dat_a   (id2ex_dat_a_next ), // o, 32  X logic  , Output A : rd1
-   .ex_dat_b   (id2ex_dat_b_next ), // o, 32  X logic  , Output B : rd2 or immediate
-   .ex_rd2     (id2ex_rd2_next   )  // o, 32  X logic  , Address for store operations : rd2
+   .ex_inst         (id2ex_inst_next         ), // o, 32  X logic  , Output instruction
+   .ex_dat_a        (id2ex_dat_a_next        ), // o, 32  X logic  , Output A : rd1
+   .ex_dat_b        (id2ex_dat_b_next        ), // o, 32  X logic  , Output B : rd2 or immediate
+   .ex_rd2          (id2ex_rd2_next          )  // o, 32  X logic  , Address for store operations : rd2
 );
 
 // Execute Stage //
 // ------------- //
 execute_top i_execute_top (
    // Decode Inputs // 
-   .ex_inst    (id2ex_inst       ), // i, 32 X logic  , Input instruction
-   .ex_dat_a   (id2ex_dat_a      ), // i, 32 X logic  , Output A : rd1
-   .ex_dat_b   (id2ex_dat_b      ), // i, 32 X logic  , Output B : rd2 or immediate
-   .ex_rd2     (id2ex_rd2        ), // i, 32 X logic  , Address for store operations : rd2
+   .ex_inst         (id2ex_inst         ), // i, 32 X logic  , Input instruction
+   .ex_dat_a        (id2ex_dat_a        ), // i, 32 X logic  , Output A : rd1
+   .ex_dat_b        (id2ex_dat_b        ), // i, 32 X logic  , Output B : rd2 or immediate
+   .ex_rd2          (id2ex_rd2          ), // i, 32 X logic  , Address for store operations : rd2
    // Execute Forwarding //
-   .id_fwd_we  (ex2id_fwd_we     ), // i, [1] X logic  , forwarded write enable from execute stage
-   .id_fwd_dst (ex2id_fwd_dst    ), // i,  5  X logic  , forwarded destination register from execute stage
-   .id_fwd_dat (ex2id_fwd_dat    ), // i, 32  X logic  , forwarded data from execute stage
+   .id_fwd_we       (ex2id_fwd_we       ), // i, [1] X logic  , forwarded write enable from execute stage
+   .id_fwd_dst      (ex2id_fwd_dst      ), // i,  5  X logic  , forwarded destination register from execute stage
+   .id_fwd_dat      (ex2id_fwd_dat      ), // i, 32  X logic  , forwarded data from execute stage
    // Pipe interlock bubble //
-   .ex_load    (ex_load          ), // o, [1] X logic  , execute instruction is LOAD
+   .ex_load         (ex_load            ), // o, [1] X logic  , execute instruction is LOAD
+   // Branch Flush IF //
+   .id_branch_taken (id2ex_branch_taken ),
+   .id_branch_nt_pc (id2ex_branch_nt_pc ),
+   .ex_branch_flush (branch_flush       ),
+   .ex_branch_pc    (branch_flush_pc    ),
    // Memory Access Outputs // 
-   .ma_inst    (ex2ma_inst_next  ), // o, 32 X logic  , Output instruction
-   .ma_dat     (ex2ma_dat_next   ), // o, 32 X logic  , ALU output data
-   .ma_rd2     (ex2ma_rd2_next   )  // o, 32 X logic  , Address for store operations
+   .ma_inst         (ex2ma_inst_next    ), // o, 32 X logic  , Output instruction
+   .ma_dat          (ex2ma_dat_next     ), // o, 32 X logic  , ALU output data
+   .ma_rd2          (ex2ma_rd2_next     )  // o, 32 X logic  , Address for store operations
 );
 
 // Memory Access Stage //
@@ -172,17 +202,21 @@ memory_access_top i_memory_access_top (
 
 // FFs // 
 // --- //
-always_ff @(posedge clk) if (!rst_n) pc          <= 0 ; else if (bubble) pc         <= pc         ; else pc          <= pc_next          ; 
-always_ff @(posedge clk) if (!rst_n) if2id_inst  <= 0 ; else if (bubble) if2id_inst <= if2id_inst ; else if2id_inst  <= if2id_inst_next  ; 
-always_ff @(posedge clk) if (!rst_n) ma2wb_inst  <= 0 ;                                             else ma2wb_inst  <= ma2wb_inst_next  ; 
-always_ff @(posedge clk) if (!rst_n) ma2wb_dat   <= 0 ;                                             else ma2wb_dat   <= ma2wb_dat_next   ; 
-always_ff @(posedge clk) if (!rst_n) id2ex_inst  <= 0 ;                                             else id2ex_inst  <= id2ex_inst_next  ; 
-always_ff @(posedge clk) if (!rst_n) id2ex_dat_a <= 0 ;                                             else id2ex_dat_a <= id2ex_dat_a_next ; 
-always_ff @(posedge clk) if (!rst_n) id2ex_dat_b <= 0 ;                                             else id2ex_dat_b <= id2ex_dat_b_next ; 
-always_ff @(posedge clk) if (!rst_n) id2ex_rd2   <= 0 ;                                             else id2ex_rd2   <= id2ex_rd2_next   ; 
-always_ff @(posedge clk) if (!rst_n) ex2ma_inst  <= 0 ;                                             else ex2ma_inst  <= ex2ma_inst_next  ; 
-always_ff @(posedge clk) if (!rst_n) ex2ma_rd2   <= 0 ;                                             else ex2ma_rd2   <= ex2ma_rd2_next   ; 
-always_ff @(posedge clk) if (!rst_n) ex2ma_dat   <= 0 ;                                             else ex2ma_dat   <= ex2ma_dat_next   ; 
+always_ff @(posedge clk) if (!rst_n) pc                 <=    0 ;                                                       else pc                 <= pc_next                 ; 
+always_ff @(posedge clk) if (!rst_n) if2id_inst         <=    0 ;  else if (intrlock_bubble) if2id_inst <= if2id_inst ; else if2id_inst         <= if2id_inst_next         ; 
+always_ff @(posedge clk) if (!rst_n) ma2wb_inst         <=    0 ;                                                       else ma2wb_inst         <= ma2wb_inst_next         ; 
+always_ff @(posedge clk) if (!rst_n) ma2wb_dat          <=    0 ;                                                       else ma2wb_dat          <= ma2wb_dat_next          ; 
+always_ff @(posedge clk) if (!rst_n) id2ex_inst         <=    0 ;                                                       else id2ex_inst         <= id2ex_inst_next         ; 
+always_ff @(posedge clk) if (!rst_n) id2ex_dat_a        <=    0 ;                                                       else id2ex_dat_a        <= id2ex_dat_a_next        ; 
+always_ff @(posedge clk) if (!rst_n) id2ex_dat_b        <=    0 ;                                                       else id2ex_dat_b        <= id2ex_dat_b_next        ; 
+always_ff @(posedge clk) if (!rst_n) id2ex_rd2          <=    0 ;                                                       else id2ex_rd2          <= id2ex_rd2_next          ; 
+always_ff @(posedge clk) if (!rst_n) ex2ma_inst         <=    0 ;                                                       else ex2ma_inst         <= ex2ma_inst_next         ; 
+always_ff @(posedge clk) if (!rst_n) ex2ma_rd2          <=    0 ;                                                       else ex2ma_rd2          <= ex2ma_rd2_next          ; 
+always_ff @(posedge clk) if (!rst_n) ex2ma_dat          <=    0 ;                                                       else ex2ma_dat          <= ex2ma_dat_next          ; 
+always_ff @(posedge clk) if (!rst_n) if2id_branch_taken <= 1'b0 ;                                                       else if2id_branch_taken <= if2id_branch_taken_next ; 
+always_ff @(posedge clk) if (!rst_n) if2id_branch_nt_pc <=    0 ;                                                       else if2id_branch_nt_pc <= if2id_branch_nt_pc_next ; 
+always_ff @(posedge clk) if (!rst_n) id2ex_branch_taken <= 1'b0 ;                                                       else id2ex_branch_taken <= id2ex_branch_taken_next ; 
+always_ff @(posedge clk) if (!rst_n) id2ex_branch_nt_pc <=    0 ;                                                       else id2ex_branch_nt_pc <= id2ex_branch_nt_pc_next ; 
 
 endmodule
 
