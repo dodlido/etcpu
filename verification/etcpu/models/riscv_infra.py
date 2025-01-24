@@ -167,6 +167,27 @@ def add_reg(param_value: str, offset: int, running_sum: int)->int:
     reg_idx = int(param_value[1:])
     return running_sum + (reg_idx << offset)
 
+def int_to_twos_complement(num, bit_length):
+    # Handle negative numbers by adjusting to two's complement
+    if num < 0:
+        num = (1 << bit_length) + num
+    
+    # Convert the number to binary and pad to the specified bit length
+    bin_repr = format(num, f'0{bit_length}b')
+    
+    # Convert the string representation of the binary number to a list of 1's and 0's
+    return [int(bit) for bit in bin_repr]
+
+def twos_complement_to_int(arr):
+    # Replace the sign bit (most significant bit) with 0
+    arr[0] = 0
+    
+    # Convert the modified array back into a binary string
+    bin_repr = ''.join(str(bit) for bit in arr)
+    
+    # Convert the binary string to an integer
+    return int(bin_repr, 2)
+
 def add_imm(imm_type: str, param_value: str, running_sum: int)->int:
     '''
     adds to the current running sum the 
@@ -174,23 +195,29 @@ def add_imm(imm_type: str, param_value: str, running_sum: int)->int:
     '''
     param_int = int(param_value)
     if imm_type=='itype':
-        imm = param_int<<20
+        param_abs = twos_complement_to_int(int_to_twos_complement(param_int, 12))
+        imm = param_abs<<20
     elif imm_type=='stype':
-        imm = ((param_int % 32) << 7) + (floor(param_int / 32) << 25)
+        param_abs = twos_complement_to_int(int_to_twos_complement(param_int, 12))
+        imm = ((param_abs % 32) << 7) + (floor(param_abs / 32) << 25)
     elif imm_type=='btype':
-        imm_12_1 = floor(param_int / 2)
-        imm_12_5, imm_4_1 = floor(imm_12_1 / 32), imm_12_1 % 32 
-        imm_12, imm_11_5 = floor(imm_12_5 / 128), imm_12_5 % 128
+        param_abs = twos_complement_to_int(int_to_twos_complement(param_int, 13))
+        imm_12_1 = floor(param_abs / 2)
+        imm_12_5, imm_4_1 = floor(imm_12_1 / 16), imm_12_1 % 16 
+        imm_11_5 = imm_12_5 % 128
         imm_11, imm_10_5 = floor(imm_11_5 / 64), imm_11_5 % 64
-        imm = (imm_11 << 7) + (imm_4_1 << 8) + (imm_10_5 << 25) + (imm_12 << 31)
+        imm = (imm_11 << 7) + (imm_4_1 << 8) + (imm_10_5 << 25)
     elif imm_type=='utype':
-        imm = param_int << 12
-    else:
-        imm_20_1 = floor(param_int / 2)
-        imm_20_12, imm_11_1 = floor(imm_20_1 / (2**12)), imm_20_1 % (2**12)
-        imm_11, imm_10_1 =  floor(imm_11_1 / (2**11)), imm_11_1 % (2**11)
-        imm_20, imm_19_12 =  floor(imm_20_12 / (2**9)), imm_20_12 % (2**9)
-        imm = (imm_19_12 << 12) + (imm_11 << 20) + (imm_10_1 << 21) + (imm_20 << 31) 
+        param_abs = twos_complement_to_int(int_to_twos_complement(param_int, 20))
+        imm = param_abs << 12
+    else: # jtype 
+        param_abs = twos_complement_to_int(int_to_twos_complement(param_int, 21))
+        imm_19_12, imm_11_0 = floor(param_abs / (2**12)), param_abs % (2**12)
+        imm_11_1 = floor(imm_11_0 / (2))
+        imm_11, imm_10_1 =  floor(imm_11_1 / (2**10)), imm_11_1 % (2**10)
+        imm = (imm_19_12 << 12) + (imm_11 << 20) + (imm_10_1 << 21)
+    if param_int<0:
+        imm += 1<<31
     return running_sum + imm
 
 def add_functs(running_sum: int, funct3: int=None, funct7: int=None)->int:

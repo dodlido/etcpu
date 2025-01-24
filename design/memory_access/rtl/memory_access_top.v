@@ -6,6 +6,7 @@ module memory_access_top
 (
    // Input from execute stage // 
    // ------------------------ //
+   input  logic [32-1:0] ex_pc     , // Input pc
    input  logic [32-1:0] ex_inst   , // Output instruction 
    input  logic [32-1:0] ex_dat    , // ALU output data
    input  logic [32-1:0] ex_rd2    , // Address for store operations
@@ -20,6 +21,7 @@ module memory_access_top
    // -------------------------- //
    output logic [32-1:0] wb_dat    , // writeback data
    output logic [32-1:0] wb_inst   , // writeback instruction
+   output logic [32-1:0] wb_pc     , // Output pc
 
    // ----------------------------------------------------------------- //
    // ------------------------ Memory Interface ----------------------- // 
@@ -49,6 +51,7 @@ import utils_top::* ;
 logic [7-1:0] opcode      ; 
 logic         mem_wen_int ; 
 logic         wb_sel_mem  ; 
+logic         wb_sel_pc   ; 
 
 // Memory write logic //
 // ------------------ //
@@ -58,8 +61,10 @@ assign mem_wen_int = opcode==OP_STORE ; // write enable in store instructions on
 // WB select logic //
 // --------------- //
 assign wb_sel_mem = opcode==OP_LOAD ; 
-assign wb_dat = wb_sel_mem ? mem_dat_out : ex_dat ; 
+assign wb_sel_pc = opcode==OP_JAL ; 
+assign wb_dat = wb_sel_mem ? mem_dat_out : wb_sel_pc ? wb_pc : ex_dat ; 
 assign wb_inst = ex_inst ; 
+assign wb_pc = ex_pc ; 
 
 // Memory interface //
 // ---------------- //

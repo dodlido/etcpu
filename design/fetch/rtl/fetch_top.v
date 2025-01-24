@@ -41,13 +41,13 @@ import utils_top::* ;
 
 // Internal Logic //
 // -------------- //
-logic [07-1:0] opcode    ; 
-logic [32-1:0] int_inst  ; 
-logic [32-1:0] b_imm     ; 
-logic [32-1:0] j_imm     ; 
-logic [32-1:0] pc_p4     ; 
-logic [32-1:0] pc_pb     ; 
-logic [32-1:0] pc_pj     ; 
+logic [07-1:0] opcode     ; 
+logic [32-1:0] int_inst   ; 
+logic [32-1:0] b_imm      ; 
+logic [32-1:0] j_imm      ; 
+logic [32-1:0] pc_p4      ; 
+logic [32-1:0] pc_pb      ; 
+logic [32-1:0] pc_pj      ; 
 
 // Next Program Counter Logic //
 // -------------------------- //

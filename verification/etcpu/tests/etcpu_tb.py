@@ -60,7 +60,7 @@ class InstWrDriver(BusDriver):
         for _ in range(num_of_nops):
             await self._driver_send('nop')
 
-async def basic_test(inst_driver: InstWrDriver):
+async def test_basic(inst_driver: InstWrDriver):
     '''
     basic test:
         1. addi x1, x0, 7 
@@ -102,6 +102,17 @@ async def test_interlock_scenario(inst_driver: InstWrDriver):
     await inst_driver._driver_send('lw x2, 0(x0)')
     await inst_driver._driver_send('add x3, x2, x2')
 
+async def test_jal(inst_driver: InstWrDriver):
+    '''
+    test jal instruction:
+        1. nop X 5 
+        2. addi x1, x1, 1
+        4. jal x2, -4
+    '''
+    await inst_driver._load_nops(5)
+    await inst_driver._driver_send('addi x1, x1, 1')
+    await inst_driver._driver_send('jal x2, -4')
+
 @cocotb.test()
 async def test_wrapper(dut):
     
@@ -123,7 +134,7 @@ async def test_wrapper(dut):
     ######################################
     ########### Test Case Here ###########
     ######################################
-    await test_interlock_scenario(inst_driver)
+    await test_jal(inst_driver)
     ######################################
     ########### Test Case Ends ###########
     ######################################

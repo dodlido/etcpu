@@ -16,6 +16,7 @@ import utils_top::* ;
 // Internal Wires // 
 // -------------- //
 logic [32-1:0] mask_stype        ; 
+logic [32-1:0] mask_jtype        ;
 // R-type Masks // 
 logic [32-1:0] mask_rtype_add    ; 
 logic [32-1:0] mask_rtype_sub    ; 
@@ -57,6 +58,7 @@ logic [32-1:0] res_rtype         ;
 logic [32-1:0] res_btype         ; 
 logic [32-1:0] res_itype         ; 
 logic [32-1:0] res_stype         ; 
+logic [32-1:0] res_jtype         ; 
 
 // Calculate all the possible results //
 // ---------------------------------- //
@@ -122,18 +124,22 @@ assign res_itype = ( mask_itype_add  & res_add  ) |
 
 assign res_stype = ( res_add ) ; 
 
+assign res_jtype = ( res_add ) ; 
+
 // Create instruction type masks // 
 // ----------------------------- //
 assign mask_rtype = {32{opcode==OP_RR}} ;
+assign mask_jtype = {32{opcode==OP_JAL | opcode==OP_JALR}} ; 
 assign mask_btype = {32{opcode==OP_BRANCH}} ;
 assign mask_stype = {32{opcode==OP_STORE | opcode==OP_LOAD}} ; 
-assign mask_itype = {32{(opcode!=OP_RR & opcode!=OP_BRANCH & opcode!=OP_STORE)}} ;
+assign mask_itype = {32{(opcode==OP_LUI | opcode==OP_AUIPC | opcode==OP_IMM)}} ;
 
 // Create the final result //
 // ----------------------- //
 assign y = ( mask_rtype & res_rtype ) | 
            ( mask_btype & res_btype ) | 
            ( mask_stype & res_stype ) | 
+           ( mask_jtype & res_jtype ) | 
            ( mask_itype & res_itype ) ; 
 
 endmodule

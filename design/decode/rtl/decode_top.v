@@ -29,12 +29,14 @@ module decode_top (
 
    // Write-back Inputs //
    // ----------------- //
+   input  logic [32-1:0] wb_pc           , // writeback PC
    input  logic [32-1:0] wb_inst         , // writeback instruction
    input  logic [32-1:0] wb_dat          , // Regfile write-data from writeback
 
    // Fetch Inputs //
    // ------------ //
    input  logic [32-1:0] if_inst         , // Input instruction 
+   input  logic [32-1:0] if_pc           , // Input pc
 
    // Pipe interlock bubble //
    // --------------------- //
@@ -44,6 +46,7 @@ module decode_top (
    // Execute Outputs // 
    // --------------- //
    output logic [32-1:0] ex_inst         , // Output instruction 
+   output logic [32-1:0] ex_pc           , // Output PC 
    output logic [32-1:0] ex_dat_a        , // Output A : rd1 
    output logic [32-1:0] ex_dat_b        , // Output B : rd2 or immediate 
    output logic [32-1:0] ex_rd2            // rd2 
@@ -171,6 +174,7 @@ assign intrlock_bubble = ex_load & (ex_fwd_dst!=5'h0) & ((rd1_re & ex_fwd_dst==r
 // Drive Execute Outputs // 
 // --------------------- // 
 assign ex_inst   = ex_branch_flush ? BUBBLE  : inst    ; 
+assign ex_pc     =                             if_pc   ; 
 assign ex_dat_a  =                             fwd_rd1 ;  
 assign ex_dat_b  = (opcode==OP_RR) ? fwd_rd2 : imm     ; 
 assign ex_rd2    =                             fwd_rd2 ; 
