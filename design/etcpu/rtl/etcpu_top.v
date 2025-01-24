@@ -38,6 +38,7 @@ module etcpu_top (
 logic [32-1:0] pc_next                 ; 
 // IF --> ID //
 logic [32-1:0] if2id_inst_next         ; 
+logic [32-1:0] if2id_jalr_pci_next     ; 
 // MA --> WB // 
 logic [32-1:0] ma2wb_pc_next           ; 
 logic [32-1:0] ma2wb_inst_next         ;
@@ -74,9 +75,11 @@ logic [32-1:0] id2ex_branch_nt_pc_next ;
 
 // Internal Registers //
 // ------------------ //
-// IF --> ID //
-logic [32-1:0] if2id_inst         ; 
 logic [32-1:0] pc                 ; 
+// IF --> ID //
+logic [32-1:0] if2id_pc           ; 
+logic [32-1:0] if2id_inst         ; 
+logic [32-1:0] if2id_jalr_pci     ; 
 // MA --> WB // 
 logic [32-1:0] ma2wb_pc           ; 
 logic [32-1:0] ma2wb_inst         ;
@@ -108,6 +111,8 @@ fetch_top i_fetch_top (
    .id_inst         (if2id_inst_next         ), // o, 32  X logic  , Decode stage instruction
    // Pipe interlock bubble //
    .intrlock_bubble (intrlock_bubble         ), // i, [1] X logic  , bubble due to pipe interlock                
+   // JALR //
+   .id_jalr_pci     (if2id_jalr_pci_next     ), 
    // Branch Flush IF //
    .id_branch_taken (if2id_branch_taken_next ),
    .id_branch_nt_pc (if2id_branch_nt_pc_next ),
@@ -139,7 +144,7 @@ decode_top i_decode_top (
    .wb_inst         (ma2wb_inst              ), // i, 32  X logic  , writeback instruction
    .wb_dat          (ma2wb_dat               ), // i, 32  X logic  , Regfile write-data from writeback
    // Fetch Inputs //
-   .if_pc           (pc                      ), // i, 32  X logic  , Input pc
+   .if_pc           (if2id_pc                ), // i, 32  X logic  , Input pc
    .if_inst         (if2id_inst              ), // i, 32  X logic  , Input instruction
    // Pipe interlock bubble //
    .ex_load         (ex_load                 ), // i, [1] X logic  , execute instruction is LOAD
@@ -150,6 +155,8 @@ decode_top i_decode_top (
    .ex_branch_taken (id2ex_branch_taken_next ),
    .ex_branch_nt_pc (id2ex_branch_nt_pc_next ),
    .ex_branch_flush (branch_flush            ),
+   // JALR //
+   .if_jalr_pci     (if2id_jalr_pci          ), 
    // Execute Outputs // 
    .ex_pc           (id2ex_pc_next           ), // o, 32 X logic   , Output pc
    .ex_inst         (id2ex_inst_next         ), // o, 32  X logic  , Output instruction
@@ -214,24 +221,31 @@ memory_access_top i_memory_access_top (
 
 // FFs // 
 // --- //
+// PC register //
 always_ff @(posedge clk) if (!rst_n) pc                 <=    0 ;                                                       else pc                 <= pc_next                 ; 
+// IF --> ID // 
+always_ff @(posedge clk) if (!rst_n) if2id_pc           <=    0 ;                                                       else if2id_pc           <= pc                      ; 
 always_ff @(posedge clk) if (!rst_n) if2id_inst         <=    0 ;  else if (intrlock_bubble) if2id_inst <= if2id_inst ; else if2id_inst         <= if2id_inst_next         ; 
-always_ff @(posedge clk) if (!rst_n) ma2wb_pc           <=    0 ;                                                       else ma2wb_pc           <= ma2wb_pc_next           ; 
-always_ff @(posedge clk) if (!rst_n) ma2wb_inst         <=    0 ;                                                       else ma2wb_inst         <= ma2wb_inst_next         ; 
-always_ff @(posedge clk) if (!rst_n) ma2wb_dat          <=    0 ;                                                       else ma2wb_dat          <= ma2wb_dat_next          ; 
+always_ff @(posedge clk) if (!rst_n) if2id_jalr_pci     <=    0 ;                                                       else if2id_jalr_pci     <= if2id_jalr_pci_next     ; 
+always_ff @(posedge clk) if (!rst_n) if2id_branch_taken <= 1'b0 ;                                                       else if2id_branch_taken <= if2id_branch_taken_next ; 
+always_ff @(posedge clk) if (!rst_n) if2id_branch_nt_pc <=    0 ;                                                       else if2id_branch_nt_pc <= if2id_branch_nt_pc_next ; 
+// ID --> EX // 
 always_ff @(posedge clk) if (!rst_n) id2ex_inst         <=    0 ;                                                       else id2ex_inst         <= id2ex_inst_next         ; 
 always_ff @(posedge clk) if (!rst_n) id2ex_dat_a        <=    0 ;                                                       else id2ex_dat_a        <= id2ex_dat_a_next        ; 
 always_ff @(posedge clk) if (!rst_n) id2ex_dat_b        <=    0 ;                                                       else id2ex_dat_b        <= id2ex_dat_b_next        ; 
 always_ff @(posedge clk) if (!rst_n) id2ex_rd2          <=    0 ;                                                       else id2ex_rd2          <= id2ex_rd2_next          ; 
 always_ff @(posedge clk) if (!rst_n) id2ex_pc           <=    0 ;                                                       else id2ex_pc           <= id2ex_pc_next           ; 
+always_ff @(posedge clk) if (!rst_n) id2ex_branch_taken <= 1'b0 ;                                                       else id2ex_branch_taken <= id2ex_branch_taken_next ; 
+always_ff @(posedge clk) if (!rst_n) id2ex_branch_nt_pc <=    0 ;                                                       else id2ex_branch_nt_pc <= id2ex_branch_nt_pc_next ; 
+// EX --> MA // 
 always_ff @(posedge clk) if (!rst_n) ex2ma_pc           <=    0 ;                                                       else ex2ma_pc           <= ex2ma_pc_next           ; 
 always_ff @(posedge clk) if (!rst_n) ex2ma_inst         <=    0 ;                                                       else ex2ma_inst         <= ex2ma_inst_next         ; 
 always_ff @(posedge clk) if (!rst_n) ex2ma_rd2          <=    0 ;                                                       else ex2ma_rd2          <= ex2ma_rd2_next          ; 
 always_ff @(posedge clk) if (!rst_n) ex2ma_dat          <=    0 ;                                                       else ex2ma_dat          <= ex2ma_dat_next          ; 
-always_ff @(posedge clk) if (!rst_n) if2id_branch_taken <= 1'b0 ;                                                       else if2id_branch_taken <= if2id_branch_taken_next ; 
-always_ff @(posedge clk) if (!rst_n) if2id_branch_nt_pc <=    0 ;                                                       else if2id_branch_nt_pc <= if2id_branch_nt_pc_next ; 
-always_ff @(posedge clk) if (!rst_n) id2ex_branch_taken <= 1'b0 ;                                                       else id2ex_branch_taken <= id2ex_branch_taken_next ; 
-always_ff @(posedge clk) if (!rst_n) id2ex_branch_nt_pc <=    0 ;                                                       else id2ex_branch_nt_pc <= id2ex_branch_nt_pc_next ; 
+// MA --> WB // 
+always_ff @(posedge clk) if (!rst_n) ma2wb_pc           <=    0 ;                                                       else ma2wb_pc           <= ma2wb_pc_next           ; 
+always_ff @(posedge clk) if (!rst_n) ma2wb_inst         <=    0 ;                                                       else ma2wb_inst         <= ma2wb_inst_next         ; 
+always_ff @(posedge clk) if (!rst_n) ma2wb_dat          <=    0 ;                                                       else ma2wb_dat          <= ma2wb_dat_next          ; 
 
 endmodule
 

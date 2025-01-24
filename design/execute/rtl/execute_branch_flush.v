@@ -1,6 +1,7 @@
 module execute_branch_flush (
    // Branch instruction cond //
    input  logic          inst_branch , 
+   input  logic          inst_jalr , 
    // ALU output //
    input  logic [32-1:0] alu_dat_out , 
    // Funct3 of instruction //
@@ -24,6 +25,6 @@ assign br_act = funct3==ALU_BGEU | funct3==ALU_BGE ?    ~alu_dat_out[0] : // BGE
                 funct3==ALU_BEQ                    ? ~(|(alu_dat_out))  : // BEQ
                                                        |(alu_dat_out)   ; // BNE
 
-assign flush = inst_branch & (br_pred ^ br_act) ;
+assign flush = inst_jalr | (inst_branch & (br_pred ^ br_act)) ;
 
 endmodule

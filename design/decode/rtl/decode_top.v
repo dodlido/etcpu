@@ -27,6 +27,10 @@ module decode_top (
    output logic [32-1:0] ex_branch_nt_pc , // non-taken branch PC 
    input  logic          ex_branch_flush , // Branch flush indicator from execute stage
 
+   // JALR IF //
+   // ------- //
+   input  logic [32-1:0] if_jalr_pci     , // IF JALR partial calculation , PC + I-type-immediate
+
    // Write-back Inputs //
    // ----------------- //
    input  logic [32-1:0] wb_pc           , // writeback PC
@@ -173,11 +177,11 @@ assign intrlock_bubble = ex_load & (ex_fwd_dst!=5'h0) & ((rd1_re & ex_fwd_dst==r
 
 // Drive Execute Outputs // 
 // --------------------- // 
-assign ex_inst   = ex_branch_flush ? BUBBLE  : inst    ; 
-assign ex_pc     =                             if_pc   ; 
-assign ex_dat_a  =                             fwd_rd1 ;  
-assign ex_dat_b  = (opcode==OP_RR) ? fwd_rd2 : imm     ; 
-assign ex_rd2    =                             fwd_rd2 ; 
+assign ex_inst   = ex_branch_flush ? BUBBLE : inst ; 
+assign ex_pc     = if_pc   ; 
+assign ex_dat_a  = fwd_rd1 ;  
+assign ex_dat_b  = (opcode==OP_JALR) ? if_jalr_pci : (opcode==OP_RR) ? fwd_rd2 : imm ; 
+assign ex_rd2    = fwd_rd2 ; 
 
 // Propagate branch IF //
 // ------------------- //

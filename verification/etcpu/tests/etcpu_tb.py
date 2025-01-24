@@ -107,11 +107,30 @@ async def test_jal(inst_driver: InstWrDriver):
     test jal instruction:
         1. nop X 5 
         2. addi x1, x1, 1
-        4. jal x2, -4
+        3. jal x2, -4
     '''
-    await inst_driver._load_nops(5)
-    await inst_driver._driver_send('addi x1, x1, 1')
-    await inst_driver._driver_send('jal x2, -4')
+    await inst_driver._load_nops(5) # 0x0, 0x4, 0x8, 0xc, 0x10
+    await inst_driver._driver_send('addi x1, x1, 1') # 0x14
+    await inst_driver._driver_send('jal x2, -4') # 0x18
+    # Those instructions should never happen:
+    await inst_driver._driver_send('addi x6, x0, 7') # 0x1c
+    await inst_driver._driver_send('addi x17, x0, 137') # 0x20
+
+async def test_jalr(inst_driver: InstWrDriver):
+    '''
+    test jalr instruction:
+        1. nop X 5
+        2. addi x5, x0, 10
+        2. addi x1, x1, 1
+        4. jalr x2, x5, -14
+    '''
+    await inst_driver._load_nops(5) # 0x0, 0x4, 0x8, 0xc, 0x10
+    await inst_driver._driver_send('addi x5, x0, 10') # 0x14
+    await inst_driver._driver_send('addi x1, x1, 1') # 0x18 
+    await inst_driver._driver_send('jalr x2, x5, -14') # 0x1c 
+    # Those instructions should never happen:
+    await inst_driver._driver_send('addi x6, x0, 7') # 0x20
+    await inst_driver._driver_send('addi x17, x0, 137') # 0x24
 
 @cocotb.test()
 async def test_wrapper(dut):
@@ -134,7 +153,7 @@ async def test_wrapper(dut):
     ######################################
     ########### Test Case Here ###########
     ######################################
-    await test_jal(inst_driver)
+    await test_jalr(inst_driver)
     ######################################
     ########### Test Case Ends ###########
     ######################################

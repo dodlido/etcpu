@@ -43,6 +43,7 @@ import utils_top::* ;
 // Internal Wires //
 // -------------- //
 logic inst_branch ;  
+logic inst_jalr ;  
 
 // ALU instance //
 // ------------ //
@@ -58,14 +59,16 @@ execute_alu i_alu (
 // Branch flush interface //
 // ---------------------- // 
 assign inst_branch = id_inst[6:0]==OP_BRANCH ; 
+assign inst_jalr = id_inst[6:0]==OP_JALR ; 
 execute_branch_flush i_execute_branch_flush (
    .inst_branch ( inst_branch     ),
+   .inst_jalr   ( inst_jalr       ),
    .alu_dat_out ( ma_dat          ),
    .funct3      ( id_inst[14:12]  ),
    .br_pred     ( id_branch_taken ),
    .flush       ( ex_branch_flush )
 );
-assign ex_branch_pc = id_branch_nt_pc ; 
+assign ex_branch_pc = inst_jalr ? ma_dat : id_branch_nt_pc ; 
 
 // Drive Forwarding Interface //
 // -------------------------- //
@@ -77,7 +80,7 @@ assign id_fwd_dat = ma_dat ;
 // ------------- //
 assign ex_load = id_inst[6:0]==OP_LOAD ; 
 assign ma_rd2  = id_rd2  ; 
-assign ma_inst = ex_branch_flush ? BUBBLE : id_inst ; 
+assign ma_inst = ex_branch_flush & inst_branch ? BUBBLE : id_inst ; 
 assign ma_pc   = id_pc ; 
 
 endmodule

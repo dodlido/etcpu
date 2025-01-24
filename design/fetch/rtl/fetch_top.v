@@ -24,6 +24,10 @@ module fetch_top
    input  logic          ex_branch_flush  , // Branch flush indicator from execute stage
    input  logic [32-1:0] ex_branch_pc     , // Branch flush PC
 
+   // JALR partial calculation //
+   // ------------------------
+   output logic [32-1:0] id_jalr_pci      , // PC + I-type-immediate 
+
    // ----------------------------------------------------------------- //
    // ------------------------ Memory Interface ----------------------- // 
    // ----------------------------------------------------------------- //
@@ -45,23 +49,29 @@ logic [07-1:0] opcode     ;
 logic [32-1:0] int_inst   ; 
 logic [32-1:0] b_imm      ; 
 logic [32-1:0] j_imm      ; 
+logic [32-1:0] i_imm      ; 
 logic [32-1:0] pc_p4      ; 
 logic [32-1:0] pc_pb      ; 
 logic [32-1:0] pc_pj      ; 
+logic [32-1:0] pc_pi      ; 
 
 // Next Program Counter Logic //
 // -------------------------- //
 assign opcode = int_inst[6:0] ; 
 // decode immediates //
-assign b_imm = { {20{int_inst[31]}} , int_inst[07] , int_inst[30:25] , int_inst[11:08] ,                       1'b0 } ; 
-assign j_imm = { {12{int_inst[31]}} , int_inst[19:12] , int_inst[20] , int_inst[30:25] , int_inst[24:21] ,     1'b0 } ; 
+assign b_imm = { {20{int_inst[31]}} , int_inst[07] , int_inst[30:25] , int_inst[11:08] ,                           1'b0 } ; 
+assign j_imm = { {12{int_inst[31]}} , int_inst[19:12] , int_inst[20] , int_inst[30:25] , int_inst[24:21] ,         1'b0 } ; 
+assign i_imm = { {21{int_inst[31]}}                                  , int_inst[30:25] , int_inst[24:21] , int_inst[20] } ; 
 // calculate PC options // 
 assign pc_p4 = pc + 4 ; 
 assign pc_pb = pc + b_imm ; 
 assign pc_pj = pc + j_imm ;
+assign pc_pi = pc + i_imm ; 
 // Drive output branch IF //
 assign id_branch_taken = opcode==OP_BRANCH & b_imm[31] ; 
 assign id_branch_nt_pc = id_branch_taken ? pc_p4 : pc_pb ; 
+// JALR //
+assign id_jalr_pci = pc_pi ; 
 // Next PC logic //
 assign pc_next = ex_branch_flush ? ex_branch_pc : // FLUSH
                  intrlock_bubble ? pc           : // BUBBLE

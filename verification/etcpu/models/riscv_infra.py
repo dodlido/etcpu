@@ -45,7 +45,7 @@ i_sw = {'opcode': 8, 'params': ['rs2', 'ptr'], 'imm_type': 'stype', 'funct3': 2,
 ### control transafer instructions ###
 ######################################
 i_jal = {'opcode': 27, 'params': ['rd', 'imm'], 'imm_type': 'jtype', 'funct3': None, 'funct7': None}
-i_jalr = {'opcode': 25, 'params': ['rd', 'rs1', 'imm'], 'imm_type': 'jtype', 'funct3': 0, 'funct7': None}
+i_jalr = {'opcode': 25, 'params': ['rd', 'rs1', 'imm'], 'imm_type': 'itype', 'funct3': 0, 'funct7': None}
 i_beq = {'opcode': 24, 'params': ['rs1', 'rs2', 'imm'], 'imm_type': 'btype', 'funct3': 0, 'funct7': None}
 i_bne = {'opcode': 24, 'params': ['rs1', 'rs2', 'imm'], 'imm_type': 'btype', 'funct3': 1, 'funct7': None}
 i_blt = {'opcode': 24, 'params': ['rs1', 'rs2', 'imm'], 'imm_type': 'btype', 'funct3': 4, 'funct7': None}
@@ -208,8 +208,8 @@ def add_imm(imm_type: str, param_value: str, running_sum: int)->int:
         imm_11, imm_10_5 = floor(imm_11_5 / 64), imm_11_5 % 64
         imm = (imm_11 << 7) + (imm_4_1 << 8) + (imm_10_5 << 25)
     elif imm_type=='utype':
-        param_abs = twos_complement_to_int(int_to_twos_complement(param_int, 20))
-        imm = param_abs << 12
+        param_abs = twos_complement_to_int(int_to_twos_complement(param_int, 32))
+        imm = floor(param_abs / (2**12))
     else: # jtype 
         param_abs = twos_complement_to_int(int_to_twos_complement(param_int, 21))
         imm_19_12, imm_11_0 = floor(param_abs / (2**12)), param_abs % (2**12)
