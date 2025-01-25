@@ -5,7 +5,6 @@ from math import floor
 ##############################
 ### immediate instructions ###
 ##############################
-i_nop = {'opcode': 12, 'params': [], 'imm_type': None, 'funct3': None, 'funct7': None}
 i_lui = {'opcode': 13, 'params': ['rd', 'imm'], 'imm_type': 'utype', 'funct3': None, 'funct7': None}
 i_auipc = {'opcode': 5, 'params': ['rd', 'imm'], 'imm_type': 'utype', 'funct3': None, 'funct7': None}
 i_addi = {'opcode': 4, 'params': ['rd', 'rs1', 'imm'], 'imm_type': 'itype', 'funct3': 0, 'funct7': None}
@@ -20,6 +19,7 @@ i_srai = {'opcode': 4, 'params': ['rd', 'rs1', 'imm'], 'imm_type': 'itype', 'fun
 ######################################
 ### register-register instructions ###
 ######################################
+i_nop = {'opcode': 12, 'params': [], 'imm_type': None, 'funct3': None, 'funct7': None}
 i_add = {'opcode': 12, 'params': ['rd', 'rs1', 'rs2'], 'imm_type': None, 'funct3': 0, 'funct7': 0}
 i_sub = {'opcode': 12, 'params': ['rd', 'rs1', 'rs2'], 'imm_type': None, 'funct3': 0, 'funct7': 32}
 i_sll = {'opcode': 12, 'params': ['rd', 'rs1', 'rs2'], 'imm_type': None, 'funct3': 1, 'funct7': 0}
@@ -188,6 +188,44 @@ def twos_complement_to_int(arr):
     # Convert the binary string to an integer
     return int(bin_repr, 2)
 
+def int_to_binary_array(n: int) -> list:
+    # Convert the integer to a binary string and strip off the '0b' prefix
+    binary_str = bin(n)[2:]
+    
+    # Pad the binary string with leading zeros to make sure it's 32 bits long
+    binary_str = binary_str.zfill(32)
+    
+    # Convert the string into a list of characters ('0' or '1') and return it
+    return [int(bit) for bit in binary_str][::-1]
+
+def binary_array_to_int(binary_array: list) -> int:
+    # Initialize the result to 0
+    result = 0
+    
+    # Iterate over the binary array (in reversed order, so least significant bit first)
+    for i, bit in enumerate(binary_array):
+        # Shift the current result left by 1 and add the current bit
+        result |= bit << i
+    
+    return result
+
+def binary_array_to_int_reversed_2s_complement(binary_array: list) -> int:
+    # Initialize the result to 0
+    result = 0
+    n = len(binary_array)  # Length of the array
+    
+    # Iterate over the binary array (in reversed order, so least significant bit first)
+    for i, bit in enumerate(binary_array):
+        # Shift the current result left by 1 and add the current bit
+        result |= bit << i
+    
+    # If the sign bit (most significant bit) is 1, it's a negative number in 2's complement
+    if binary_array[-1] == 1:  # Check if the last bit (sign bit) is 1
+        # To convert from 2's complement, subtract 2^n from the result
+        result -= (1 << n)  # Subtract 2^n (where n is the length of the array)
+    
+    return result
+
 def add_imm(imm_type: str, param_value: str, running_sum: int)->int:
     '''
     adds to the current running sum the 
@@ -227,7 +265,7 @@ def add_functs(running_sum: int, funct3: int=None, funct7: int=None)->int:
         running_sum += funct7 << 25
     return running_sum
 
-def str2bin(cmd_str: str)->int:
+def inst_str2int(cmd_str: str)->int:
     '''
     converts a string containing an RV32I command to a binary instruction
     command_str is a RISCV RV32I valid command, for example:
@@ -257,3 +295,275 @@ def str2bin(cmd_str: str)->int:
     cmd_bin = add_functs(cmd_bin, inst_dict['funct3'], inst_dict['funct7'])
 
     return cmd_bin
+
+def inst_int2str(cmd_int: int)->str:
+    inst_bin_arr = int_to_binary_array(cmd_int)
+    opcode = binary_array_to_int(inst_bin_arr[2:7])
+    funct3 = binary_array_to_int(inst_bin_arr[12:15])
+    rd = binary_array_to_int(inst_bin_arr[7:12])
+    rs1 = binary_array_to_int(inst_bin_arr[15:20])
+    rs2 = binary_array_to_int(inst_bin_arr[20:25])
+    funct7 = binary_array_to_int(inst_bin_arr[25:])
+    rtype, stype, jtype, itype, btype, utype  = [12], [8], [27], [0, 25, 4], [24], [13, 5]
+    # Rtype Instruction
+    if opcode in rtype: 
+        if funct3==i_add['funct3'] and funct7==i_add['funct7']:
+            if rd==0: # this is actually a NOP
+                return 'nop'
+            else:
+                return f'add x{rd}, x{rs1}, x{rs2}'
+        elif funct3==i_sub['funct3'] and funct7==i_sub['funct7']:
+            return f'sub x{rd}, x{rs1}, x{rs2}'
+        elif funct3==i_sll['funct3'] and funct7==i_sll['funct7']:
+            return f'sll x{rd}, x{rs1}, x{rs2}'
+        elif funct3==i_slt['funct3'] and funct7==i_slt['funct7']:
+            return f'slt x{rd}, x{rs1}, x{rs2}'
+        elif funct3==i_sltu['funct3'] and funct7==i_sltu['funct7']:
+            return f'sltu x{rd}, x{rs1}, x{rs2}'
+        elif funct3==i_xor['funct3'] and funct7==i_xor['funct7']:
+            return f'xor x{rd}, x{rs1}, x{rs2}'
+        elif funct3==i_srl['funct3'] and funct7==i_srl['funct7']:
+            return f'srl x{rd}, x{rs1}, x{rs2}'
+        elif funct3==i_sra['funct3'] and funct7==i_sra['funct7']:
+            return f'sra x{rd}, x{rs1}, x{rs2}'
+        elif funct3==i_or['funct3'] and funct7==i_or['funct7']:
+            return f'or x{rd}, x{rs1}, x{rs2}'
+        elif funct3==i_and['funct3'] and funct7==i_and['funct7']:
+            return f'and x{rd}, x{rs1}, x{rs2}'
+        else:
+            print(f'error, found a non-supported f3+f7 combo for R-type inst: funct3={funct3}, funct7={funct7}')
+            exit(1)
+    # Stype instruction
+    elif opcode in stype:
+        imm = binary_array_to_int_reversed_2s_complement(inst_bin_arr[7:12] + inst_bin_arr[25:])
+        if funct3==i_sb['funct3']:
+            inst_str = 'sb '
+        elif funct3==i_sh['funct3']:
+            inst_str = 'sh '
+        elif funct3==i_sw['funct3']:
+            inst_str = 'sw '
+        else:
+            print(f'error, found a non-supported f3 for S-type inst: funct3={funct3}')
+            exit(1)
+        return inst_str + f'x{rs2}, {imm}(x{rs1})'
+    # Jtype inst
+    elif opcode in jtype:
+        imm = binary_array_to_int_reversed_2s_complement([0] + inst_bin_arr[21:31] + [inst_bin_arr[20]] + inst_bin_arr[12:20] + [inst_bin_arr[31]])
+        return f'jal x{rd}, {imm}'
+    # Itype inst
+    elif opcode in itype:
+        imm = binary_array_to_int_reversed_2s_complement(inst_bin_arr[20:])
+        if opcode==4: # register-immediate calculations
+            if funct3==i_addi['funct3']:
+                return f'addi x{rd}, x{rs1}, {imm}'
+            elif funct3==i_slti['funct3']:
+                return f'slti x{rd}, x{rs1}, {imm}'
+            elif funct3==i_xori['funct3']:
+                return f'xori x{rd}, x{rs1}, {imm}'
+            elif funct3==i_ori['funct3']:
+                return f'ori x{rd}, x{rs1}, {imm}'
+            elif funct3==i_andi['funct3']:
+                return f'andi x{rd}, x{rs1}, {imm}'
+            elif funct3==i_slli['funct3'] and funct7==i_slli['funct7']:
+                return f'slli x{rd}, x{rs1}, {imm}'
+            elif funct3==i_srli['funct3'] and funct7==i_srli['funct7']:
+                return f'srli x{rd}, x{rs1}, {imm}'
+            elif funct3==i_srai['funct3'] and funct7==i_srai['funct7']:
+                return f'srai x{rd}, x{rs1}, {imm}'
+            else:
+                print(f'error, found a non-existing funct3=({funct3}) and funct7=({funct7}) combination for register-immediate operation')
+                exit(1)
+        elif opcode==0:
+            if funct3==i_lb['funct3']:
+                return f'lb x{rd}, {imm}(x{rs1})'
+            elif funct3==i_lh['funct3']:
+                return f'lh x{rd}, {imm}(x{rs1})'
+            elif funct3==i_lw['funct3']:
+                return f'lw x{rd}, {imm}(x{rs1})'
+            else:
+                print(f'error, found a non-supported funct3=({funct3}) option for load instruction')
+                exit(1)
+        elif opcode==25:
+            return f'jalr x{rd}, x{rs1}, {imm}'
+        else:
+            print(f'error, found a non-supported opcode for i-type inst: opcode={opcode}')
+            exit(1)
+    # Btype inst
+    elif opcode in btype:
+        imm = binary_array_to_int_reversed_2s_complement([0] + inst_bin_arr[8:12] + inst_bin_arr[25:31] + [inst_bin_arr[7]] + [inst_bin_arr[31]])
+        if funct3==i_beq['funct3']:
+            inst_str = 'beq '
+        elif funct3==i_bge['funct3']:
+            inst_str = 'bge '
+        elif funct3==i_bgeu['funct3']:
+            inst_str = 'bgeu '
+        elif funct3==i_blt['funct3']:
+            inst_str = 'blt '
+        elif funct3==i_bltu['funct3']:
+            inst_str = 'bltu '
+        elif funct3==i_bne['funct3']:
+            inst_str = 'bne '
+        else:
+            print(f'error, found a non-supported f3 for B-type inst: funct3={funct3}')
+            exit(1)
+        return inst_str + f'x{rs1}, x{rs2}, {imm}'
+    # Utype inst
+    elif opcode in utype:
+        imm = binary_array_to_int_reversed_2s_complement([0,0,0,0,0,0,0,0,0,0,0,0] + inst_bin_arr[12:])
+        if opcode==i_lui['opcode']:
+            return f'lui x{rd}, {imm}'
+        elif opcode==i_auipc['opcode']:
+            return f'auipc x{rd}, {imm}'
+        else:
+            print(f'error, found a non-supported opcode for u-type inst: opcode={opcode}')
+            exit(1)
+    # Non-supported opcode
+    else:
+        print(f'error, found a non-supported opcode {opcode}')
+        exit(2)
+
+def inst_int2rgfexp(cmd_int: int, rgf_state: List[int], mm_state: List[int], next_pc: int)->Tuple[bool, int, int, List[int]]:
+    '''
+    This function gets lists of the current RGF and main memory states and a RV32I command and returns:
+        1. wen (bool) - write-enable signal to the RGF
+        2. wa (int) - pointer to the register that should be written
+        3. wd (int) - write data to the register that should be written
+        4. rgf_next_state (List[int]) - next state of the register file as a result of the write
+    '''
+    inst_bin_arr = int_to_binary_array(cmd_int)
+    opcode = binary_array_to_int(inst_bin_arr[2:7])
+    funct3 = binary_array_to_int(inst_bin_arr[12:15])
+    wa = binary_array_to_int(inst_bin_arr[7:12])
+    rs1 = binary_array_to_int(inst_bin_arr[15:20])
+    rs2 = binary_array_to_int(inst_bin_arr[20:25])
+    funct7 = binary_array_to_int(inst_bin_arr[25:])
+    rgf_next_state = rgf_state.copy() 
+    rtype, stype, jtype, itype, btype, utype  = [12], [8], [27], [0, 25, 4], [24], [13, 5]
+    # Rtype Instruction
+    if opcode in rtype: 
+        wen = True
+        if funct3==i_add['funct3'] and funct7==i_add['funct7']:
+            if wa==0: 
+                wen = False # this is actually a NOP
+                wd = 0
+            else:
+                wd = rgf_state[rs1] + rgf_state[rs2]
+        elif funct3==i_sub['funct3'] and funct7==i_sub['funct7']:
+            wd = rgf_state[rs1] - rgf_state[rs2]
+        elif funct3==i_sll['funct3'] and funct7==i_sll['funct7']:
+            wd = rgf_state[rs1] << rgf_state[rs2]
+        elif funct3==i_slt['funct3'] and funct7==i_slt['funct7']:
+            wd = 1 if (rgf_state[rs1] < rgf_state[rs2]) else 0
+        elif funct3==i_sltu['funct3'] and funct7==i_sltu['funct7']:
+            rs1_arr = int_to_binary_array(rgf_state[rs1])
+            rs2_arr = int_to_binary_array(rgf_state[rs2])
+            rs1_signbit = rs1_arr[31]
+            rs2_signbit = rs2_arr[31]
+            rs1_abs_val = binary_array_to_int(rs1_arr[:31])
+            rs2_abs_val = binary_array_to_int(rs2_arr[:31])
+            if rs1_signbit==rs2_signbit:
+                wd = 1 if (rs1_abs_val < rs2_abs_val) else 0 
+            else:
+                wd = 1 if rs1_signbit==1 else 0 
+        elif funct3==i_xor['funct3'] and funct7==i_xor['funct7']:
+            wd = rgf_state[rs1] ^ rgf_state[rs2]
+        elif funct3==i_srl['funct3'] and funct7==i_srl['funct7']:
+            wd = (rgf_state[rs1] & 0xFFFFFFFF) >> rgf_state[rs2]
+        elif funct3==i_sra['funct3'] and funct7==i_sra['funct7']:
+            wd = rgf_state[rs1] >> rgf_state[rs2]
+        elif funct3==i_or['funct3'] and funct7==i_or['funct7']:
+            wd = rgf_state[rs1] | rgf_state[rs2]
+        elif funct3==i_and['funct3'] and funct7==i_and['funct7']:
+            wd = rgf_state[rs1] & rgf_state[rs2]
+        else:
+            print(f'error, found a non-supported f3+f7 combo for R-type inst: funct3={funct3}, funct7={funct7}')
+            exit(1)
+    # Itype Instruction
+    elif opcode in itype:
+        imm = binary_array_to_int_reversed_2s_complement(inst_bin_arr[20:])
+        wen = True
+        if opcode==4: # register-immediate calculations
+            if funct3==i_addi['funct3']:
+                wd = rgf_state[rs1] + imm
+            elif funct3==i_slti['funct3']:
+                wd = 1 if (rgf_state[rs1] < imm) else 0 
+            elif funct3==i_xori['funct3']:
+                wd = rgf_state[rs1] ^ imm 
+            elif funct3==i_ori['funct3']:
+                wd = rgf_state[rs1] | imm 
+            elif funct3==i_andi['funct3']:
+                wd = rgf_state[rs1] & imm 
+            elif funct3==i_slli['funct3'] and funct7==i_slli['funct7']:
+                wd = rgf_state[rs1] << imm 
+            elif funct3==i_srli['funct3'] and funct7==i_srli['funct7']:
+                wd = (rgf_state[rs1] & 0xFFFFFFFF) >> imm 
+            elif funct3==i_srai['funct3'] and funct7==i_srai['funct7']:
+                wd = rgf_state[rs1] >> imm 
+            else:
+                print(f'error, found a non-existing funct3=({funct3}) and funct7=({funct7}) combination for register-immediate operation')
+                exit(1)
+        elif opcode==0:
+            addr = (rgf_state[rs1] + imm) >> 2
+            word = mm_state[addr]
+            if funct3==i_lb['funct3']:
+                byte = word % (2**8)
+                wd = byte
+            elif funct3==i_lh['funct3']:
+                half_word = word % (2**16)
+                wd = half_word
+            elif funct3==i_lw['funct3']:
+                wd = word
+            else:
+                print(f'error, found a non-supported funct3=({funct3}) option for load instruction')
+                exit(1)
+        elif opcode==25:
+            wd = next_pc
+        else:
+            print(f'error, found a non-supported opcode for i-type inst: opcode={opcode}')
+            exit(1)
+    # Jtype Instruction
+    elif opcode in jtype:
+        wen = True
+        wd = next_pc
+    # Utype Instruction
+    elif opcode in utype:
+        print('Utype is not supported yet because I am lazy')
+        exit(1)
+    # Stype or Btype Instructions - no RGF write
+    elif opcode in stype or opcode in btype:
+        wen = False
+        wa = 0 
+        wd = 0
+    # Non-supported opcode
+    else:
+        print(f'error, found a non-supported opcode {opcode}')
+        exit(1) 
+    # update the written register if there is any
+    if wen:
+        rgf_next_state[wa] = wd
+    return wen, wa, wd, rgf_next_state
+
+def inst_int2mmexp(cmd_int: int, rgf_state: List[int], mm_state: List[int])->Tuple[bool, int, int, List[int]]:
+    '''
+    This function gets lists of the current RGF and main memory states and a RV32I command and returns:
+        1. wen (bool) - write-enable signal
+        2. wa (int) - memory write address
+        3. wd (int) - memory write data
+        4. mm_next_state (List[int]) - next state of the main memory as a result of the write
+    '''
+    inst_bin_arr = int_to_binary_array(cmd_int)
+    opcode = binary_array_to_int(inst_bin_arr[2:7])
+    rs1 = binary_array_to_int(inst_bin_arr[15:20])
+    rs2 = binary_array_to_int(inst_bin_arr[20:25])
+    stype_imm = binary_array_to_int_reversed_2s_complement(inst_bin_arr[7:12] + inst_bin_arr[25:])
+    mm_next_state = mm_state.copy() 
+    
+    # update the output write interface and mem next state
+    wa = (rgf_state[rs1] + stype_imm)
+    wd = rgf_state[rs2]
+    wen = 1 if opcode==8 else 0
+    if wen:
+        virt_addr = wa >> 2
+        mm_next_state[virt_addr] = wd 
+   
+    return wen, wa, wd, mm_next_state
