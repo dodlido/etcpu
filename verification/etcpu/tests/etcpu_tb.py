@@ -132,6 +132,22 @@ async def test_jalr(inst_driver: InstWrDriver):
     await inst_driver._driver_send('addi x6, x0, 7') # 0x20
     await inst_driver._driver_send('addi x17, x0, 137') # 0x24
 
+async def test_bne(inst_driver: InstWrDriver):
+    '''
+    test jalr instruction:
+        1. nop X 5
+        2. addi x5, x0, 3
+        2. addi x1, x1, 1
+        4. bne x1, x5, -4
+    '''
+    await inst_driver._load_nops(5) # 0x0, 0x4, 0x8, 0xc, 0x10
+    await inst_driver._driver_send('addi x5, x0, 3') # 0x14
+    await inst_driver._driver_send('addi x1, x1, 1') # 0x18 
+    await inst_driver._driver_send('bne x1, x5, -4') # 0x1c 
+    # Those instructions should happen after the loop:
+    await inst_driver._driver_send('addi x6, x0, 7') # 0x20
+    await inst_driver._driver_send('addi x17, x0, 137') # 0x24
+
 @cocotb.test()
 async def test_wrapper(dut):
     
@@ -153,7 +169,7 @@ async def test_wrapper(dut):
     ######################################
     ########### Test Case Here ###########
     ######################################
-    await test_jalr(inst_driver)
+    await test_bne(inst_driver)
     ######################################
     ########### Test Case Ends ###########
     ######################################
