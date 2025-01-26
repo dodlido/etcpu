@@ -594,6 +594,7 @@ def inst_int2pcexp(cmd_int: int, rgf_state: List[int], curr_pc: int, intrlock: i
         flush = False
     elif opcode == i_jalr['opcode'] and funct3 == i_jalr['funct3']:
         imm = binary_array_to_int_reversed_2s_complement(inst_bin_arr[20:])
+        print(imm, rgf_state[rs1])
         next_pc = rgf_state[rs1] + imm
         flush = True
     elif opcode == btype:
@@ -627,8 +628,3 @@ def inst_int2pcexp(cmd_int: int, rgf_state: List[int], curr_pc: int, intrlock: i
         flush = False
     
     return next_pc, flush
-
-int_cmd = inst_str2int('jal x2, -4')
-curr_pc = 0x18
-next_pc, flush = inst_int2pcexp(int_cmd, [0]*32, curr_pc, 0)
-print(hex(next_pc))

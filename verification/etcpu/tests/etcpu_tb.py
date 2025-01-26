@@ -132,7 +132,7 @@ async def test_jal(dut):
     await inst_driver._driver_send('addi x17, x0, 137') # 0x20
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth)
 
-# @cocotb.test()
+@cocotb.test()
 async def test_jalr(dut):
     '''
     test jalr instruction:
@@ -151,7 +151,7 @@ async def test_jalr(dut):
     await inst_driver._driver_send('addi x17, x0, 137') # 0x24
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth)
 
-# @cocotb.test()
+@cocotb.test()
 async def test_bne(dut):
     '''
     test jalr instruction:
