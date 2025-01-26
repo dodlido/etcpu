@@ -47,6 +47,7 @@ async def init_test(dut)->IMDriver:
         dut.rst_n_cpu,
         dut.i_etcpu_top.pc,
         dut.i_etcpu_top.if2id_inst_next,
+        dut.i_etcpu_top.intrlock_bubble,
         pc_scoreboard,
         rgf_scoreboard,
         mm_scoreboard

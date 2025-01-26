@@ -567,3 +567,68 @@ def inst_int2mmexp(cmd_int: int, rgf_state: List[int], mm_state: List[int])->Tup
         mm_next_state[virt_addr] = wd 
    
     return wen, wa, wd, mm_next_state
+
+def inst_int2pcexp(cmd_int: int, rgf_state: List[int], curr_pc: int, intrlock: int)->Tuple[int, bool]:
+    '''
+    This function gets lists of the current RGF and main memory states and a RV32I command and returns:
+        1. next_pc (int) - next program counter value
+        2. flush (bool) - True if the expected branch prediction should fail and a flush should occur
+    '''
+    if intrlock==1:
+        return curr_pc, False
+    jtype, btype = 27, 24
+    inst_bin_arr = int_to_binary_array(cmd_int)
+    opcode = binary_array_to_int(inst_bin_arr[2:7])
+    funct3 = binary_array_to_int(inst_bin_arr[12:15])
+    rs1 = binary_array_to_int(inst_bin_arr[15:20])
+    rs2 = binary_array_to_int(inst_bin_arr[20:25])
+    rs1_arr = int_to_binary_array(rgf_state[rs1])
+    rs2_arr = int_to_binary_array(rgf_state[rs2])
+    rs1_signbit = rs1_arr[31]
+    rs2_signbit = rs2_arr[31]
+    rs1_abs_val = binary_array_to_int(rs1_arr[:31])
+    rs2_abs_val = binary_array_to_int(rs2_arr[:31])
+    if opcode == jtype:
+        imm = binary_array_to_int_reversed_2s_complement([0] + inst_bin_arr[21:31] + [inst_bin_arr[20]] + inst_bin_arr[12:20] + [inst_bin_arr[31]])
+        next_pc = curr_pc + imm
+        flush = False
+    elif opcode == i_jalr['opcode'] and funct3 == i_jalr['funct3']:
+        imm = binary_array_to_int_reversed_2s_complement(inst_bin_arr[20:])
+        next_pc = rgf_state[rs1] + imm
+        flush = True
+    elif opcode == btype:
+        imm = binary_array_to_int_reversed_2s_complement([0] + inst_bin_arr[8:12] + inst_bin_arr[25:31] + [inst_bin_arr[7]] + [inst_bin_arr[31]])
+        branch_predictor_guess = (imm > 0)
+        if funct3==i_beq['funct3']:
+            branch_actually_taken = (rgf_state[rs1]==rgf_state[rs2])
+        elif funct3==i_bge['funct3']:
+            branch_actually_taken = (rgf_state[rs1]>=rgf_state[rs2])
+        elif funct3==i_bgeu['funct3']:
+            if rs1_signbit==rs2_signbit:
+                branch_actually_taken = True if (rs1_abs_val >= rs2_abs_val) else False 
+            else:
+                branch_actually_taken = True if rs1_signbit==0 else False 
+        elif funct3==i_blt['funct3']:
+            branch_actually_taken = (rgf_state[rs1]<rgf_state[rs2])
+        elif funct3==i_bltu['funct3']:
+            if rs1_signbit==rs2_signbit:
+                branch_actually_taken = True if (rs1_abs_val < rs2_abs_val) else False 
+            else:
+                branch_actually_taken = True if rs1_signbit==1 else False 
+        elif funct3==i_bne['funct3']:
+            branch_actually_taken = (rgf_state[rs1]!=rgf_state[rs2])
+        else:
+            print(f'error, found a non-supported f3 for B-type inst: funct3={funct3}')
+            exit(1)
+        next_pc = curr_pc + imm if branch_actually_taken else curr_pc + 4
+        flush = branch_actually_taken != branch_predictor_guess
+    else:
+        next_pc = curr_pc + 4 
+        flush = False
+    
+    return next_pc, flush
+
+int_cmd = inst_str2int('jal x2, -4')
+curr_pc = 0x18
+next_pc, flush = inst_int2pcexp(int_cmd, [0]*32, curr_pc, 0)
+print(hex(next_pc))
