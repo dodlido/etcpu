@@ -568,7 +568,7 @@ def inst_int2mmexp(cmd_int: int, rgf_state: List[int], mm_state: List[int])->Tup
    
     return wen, wa, wd, mm_next_state
 
-def inst_int2pcexp(cmd_int: int, rgf_state: List[int], curr_pc: int, intrlock: int)->Tuple[int, bool]:
+def inst_int2pcexp(cmd_int: int, rgf_state: List[int], curr_pc: int, intrlock: int, mem_depth: int)->Tuple[int, bool]:
     '''
     This function gets lists of the current RGF and main memory states and a RV32I command and returns:
         1. next_pc (int) - next program counter value
@@ -594,12 +594,11 @@ def inst_int2pcexp(cmd_int: int, rgf_state: List[int], curr_pc: int, intrlock: i
         flush = False
     elif opcode == i_jalr['opcode'] and funct3 == i_jalr['funct3']:
         imm = binary_array_to_int_reversed_2s_complement(inst_bin_arr[20:])
-        print(imm, rgf_state[rs1])
         next_pc = rgf_state[rs1] + imm
         flush = True
     elif opcode == btype:
         imm = binary_array_to_int_reversed_2s_complement([0] + inst_bin_arr[8:12] + inst_bin_arr[25:31] + [inst_bin_arr[7]] + [inst_bin_arr[31]])
-        branch_predictor_guess = (imm > 0)
+        branch_predictor_guess = (imm < 0)
         if funct3==i_beq['funct3']:
             branch_actually_taken = (rgf_state[rs1]==rgf_state[rs2])
         elif funct3==i_bge['funct3']:
@@ -627,4 +626,6 @@ def inst_int2pcexp(cmd_int: int, rgf_state: List[int], curr_pc: int, intrlock: i
         next_pc = curr_pc + 4 
         flush = False
     
+    next_pc = next_pc % mem_depth
+
     return next_pc, flush

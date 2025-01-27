@@ -133,7 +133,7 @@ class Scoreboard:
             return
         expected_trns = self.expected_trns.pop(0)
         if (expected_trns == actual_trns):
-            cocotb.log.info(f"{self.name.ljust(16)} match {expected_trns.get_log_message()}")
+            cocotb.log.info(f"{self.name.ljust(16)} {expected_trns.get_log_message()} matches expected value")
         else:
             cocotb.log.error(f"{self.name.ljust(16)} MISMATCH!!\nexpected {expected_trns.get_log_message()} but got {actual_trns.get_log_message()}")
             assert False, f'Test failed due to a found mismatch'
@@ -206,7 +206,7 @@ class RGFMonitor(Monitor):
             if write_cond:
                 rgf_wr_trans = RGFTrans(int(self.wd.value), int(self.wa.value))
                 rgf_wb_inst = IMTrans(int(self.wb_inst.value), int(self.wb_pc.value))
-                self.log.info(f'{self.title} {rgf_wr_trans.get_log_message()} \n  WB instruction {rgf_wb_inst.get_log_message()}')
+                self.log.info(f'{self.title} {rgf_wr_trans.get_log_message()} \n-->WB instruction{rgf_wb_inst.get_log_message()}')
                 self.scoreboard.add_actual(rgf_wr_trans)
                 self.scoreboard.compare()
                 self._recv(rgf_wr_trans)
@@ -262,12 +262,13 @@ class PCMonitor(Monitor):
         1. Listens to program counter and instruction from DUT
         2. Logs valid instructions
     '''
-    def __init__(self, clock, rst_n, pc, inst, intrlock, pc_scoreboard: PCScoreboard, rgf_scoreboard: RGFScoreboard, mm_scoreboard: MMScoreboard, callback=None, event=None):
+    def __init__(self, clock, rst_n, pc, inst, inst_mem_depth, intrlock, pc_scoreboard: PCScoreboard, rgf_scoreboard: RGFScoreboard, mm_scoreboard: MMScoreboard, callback=None, event=None):
         super().__init__(callback, event)
         self.clock = clock
         self.rst_n = rst_n
         self.pc = pc 
         self.inst = inst
+        self.inst_mem_depth = inst_mem_depth
         self.pc_scoreboard = pc_scoreboard
         self.rgf_scoreboard = rgf_scoreboard
         self.mm_scoreboard = mm_scoreboard
@@ -286,7 +287,7 @@ class PCMonitor(Monitor):
                 # PC Scoreboard update
                 self.pc_scoreboard.compare(int(self.pc.value))
                 next_pc, flush = inst_int2pcexp(
-                    int(self.inst.value), self.rgf_scoreboard.expected_state, self.pc_scoreboard.expected_pc, int(self.intrlock.value))
+                    int(self.inst.value), self.rgf_scoreboard.expected_state, self.pc_scoreboard.expected_pc, int(self.intrlock.value), self.inst_mem_depth)
                 # TODO: this assumes that the pipe interlock implementation is correct
                 # and does not try to predict whether a pipe interlock is required
                 
@@ -310,7 +311,7 @@ class PCMonitor(Monitor):
                 self.pc_scoreboard.expected_pc = next_pc
                 # If flush, don't monitor the next 2 instructions as they should be flushed
                 if flush: 
-                    await ClockCycles(self.clock, 2) 
+                   await ClockCycles(self.clock, 2) 
                 
             await RisingEdge(self.clock)
 

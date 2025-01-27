@@ -38,7 +38,6 @@ module etcpu_top (
 logic [32-1:0] pc_next                 ; 
 // IF --> ID //
 logic [32-1:0] if2id_inst_next         ; 
-logic [32-1:0] if2id_jalr_pci_next     ; 
 // MA --> WB // 
 logic [32-1:0] ma2wb_pc_next           ; 
 logic [32-1:0] ma2wb_inst_next         ;
@@ -79,7 +78,6 @@ logic [32-1:0] pc                 ;
 // IF --> ID //
 logic [32-1:0] if2id_pc           ; 
 logic [32-1:0] if2id_inst         ; 
-logic [32-1:0] if2id_jalr_pci     ; 
 // MA --> WB // 
 logic [32-1:0] ma2wb_pc           ; 
 logic [32-1:0] ma2wb_inst         ;
@@ -111,8 +109,6 @@ fetch_top i_fetch_top (
    .id_inst         (if2id_inst_next         ), // o, 32  X logic  , Decode stage instruction
    // Pipe interlock bubble //
    .intrlock_bubble (intrlock_bubble         ), // i, [1] X logic  , bubble due to pipe interlock                
-   // JALR //
-   .id_jalr_pci     (if2id_jalr_pci_next     ), 
    // Branch Flush IF //
    .id_branch_taken (if2id_branch_taken_next ),
    .id_branch_nt_pc (if2id_branch_nt_pc_next ),
@@ -155,8 +151,6 @@ decode_top i_decode_top (
    .ex_branch_taken (id2ex_branch_taken_next ),
    .ex_branch_nt_pc (id2ex_branch_nt_pc_next ),
    .ex_branch_flush (branch_flush            ),
-   // JALR //
-   .if_jalr_pci     (if2id_jalr_pci          ), 
    // Execute Outputs // 
    .ex_pc           (id2ex_pc_next           ), // o, 32 X logic   , Output pc
    .ex_inst         (id2ex_inst_next         ), // o, 32  X logic  , Output instruction
@@ -226,7 +220,6 @@ always_ff @(posedge clk) if (!rst_n) pc                 <=    0 ;               
 // IF --> ID // 
 always_ff @(posedge clk) if (!rst_n) if2id_pc           <=    0 ;                                                       else if2id_pc           <= pc                      ; 
 always_ff @(posedge clk) if (!rst_n) if2id_inst         <=    0 ;  else if (intrlock_bubble) if2id_inst <= if2id_inst ; else if2id_inst         <= if2id_inst_next         ; 
-always_ff @(posedge clk) if (!rst_n) if2id_jalr_pci     <=    0 ;                                                       else if2id_jalr_pci     <= if2id_jalr_pci_next     ; 
 always_ff @(posedge clk) if (!rst_n) if2id_branch_taken <= 1'b0 ;                                                       else if2id_branch_taken <= if2id_branch_taken_next ; 
 always_ff @(posedge clk) if (!rst_n) if2id_branch_nt_pc <=    0 ;                                                       else if2id_branch_nt_pc <= if2id_branch_nt_pc_next ; 
 // ID --> EX // 

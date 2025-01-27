@@ -47,6 +47,7 @@ async def init_test(dut)->IMDriver:
         dut.rst_n_cpu,
         dut.i_etcpu_top.pc,
         dut.i_etcpu_top.if2id_inst_next,
+        inst_driver.inst_mem_depth,
         dut.i_etcpu_top.intrlock_bubble,
         pc_scoreboard,
         rgf_scoreboard,
@@ -136,16 +137,16 @@ async def test_jal(dut):
 async def test_jalr(dut):
     '''
     test jalr instruction:
-        1. nop X 5
-        2. addi x5, x0, 10
-        2. addi x1, x1, 1
-        4. jalr x2, x5, -14
+        1. nop X 5 (@0x0,4,8,c,10)
+        2. addi x5, x0, 10 (@14)
+        2. addi x1, x1, 1 (@18)
+        4. jalr x2, x5, -14 (@1c)
     '''
     inst_driver, cpu_rst = await init_test(dut)
     await inst_driver._load_nops(5) # 0x0, 0x4, 0x8, 0xc, 0x10
     await inst_driver._driver_send('addi x5, x0, 10') # 0x14
     await inst_driver._driver_send('addi x1, x1, 1') # 0x18 
-    await inst_driver._driver_send('jalr x2, x5, -14') # 0x1c 
+    await inst_driver._driver_send('jalr x2, x5, 14') # 0x1c 
     # Those instructions should never happen:
     await inst_driver._driver_send('addi x6, x0, 7') # 0x20
     await inst_driver._driver_send('addi x17, x0, 137') # 0x24
@@ -157,8 +158,10 @@ async def test_bne(dut):
     test jalr instruction:
         1. nop X 5
         2. addi x5, x0, 3
-        2. addi x1, x1, 1
-        4. bne x1, x5, -4
+        3. addi x1, x1, 1  <--| 
+        4. bne x1, x5, -4  >--| X 2 ==> |
+        5. addi x6, x0, 7  <-------------
+        5. addi x17, x0, 137
     '''
     inst_driver, cpu_rst = await init_test(dut)
     await inst_driver._load_nops(5) # 0x0, 0x4, 0x8, 0xc, 0x10
