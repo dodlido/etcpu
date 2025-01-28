@@ -1,7 +1,17 @@
 
 from typing import Tuple, List
 from math import floor
+import constraint
+import random
 
+opcode_dict = {
+    'rtype': [12],
+    'itype': [4,25,0],
+    'stype': [8],
+    'btype': [24],
+    'utype': [13,5],
+    'jtype': [27]
+}
 ##############################
 ### immediate instructions ###
 ##############################
@@ -629,3 +639,74 @@ def inst_int2pcexp(cmd_int: int, rgf_state: List[int], curr_pc: int, intrlock: i
     next_pc = next_pc % mem_depth
 
     return next_pc, flush
+
+class InstGenerator:
+    def __init__(self):
+        self.solutions = None
+        self.p = constraint.Problem()
+        self.p.addVariable('opcode', (opcode_dict['btype'] + opcode_dict['itype'] + opcode_dict['jtype'] 
+                            + opcode_dict['rtype'] + opcode_dict['stype'] + opcode_dict['utype'])) # bits 6:2 of opcode
+        self.p.addVariable('rd', range(0,32))
+        self.p.addVariable('funct3', range(0,8))
+        self.p.addVariable('rs1', range(0,32))
+        self.p.addVariable('rs2', range(0,32))
+        self.p.addVariable('funct7', [0,32])
+        self.p.addVariable('imm', range(0,2**4)) 
+        # TODO: Immediates are small to accelarate the solve process
+        #   1. Consider how to keep the range relativly small but get to edge cases later
+        #   2. Consider addign another variable that is the immediate sign bit to check negative immediates
+        self.p.addConstraint(lambda op, rd: rd==0 # B and S types have no RD
+                             if op in opcode_dict['btype'] or op in opcode_dict['stype'] 
+                             else True, ['opcode', 'rd']) 
+        self.p.addConstraint(lambda op, f3: f3==0 # U and J type have no funct3
+                             if op in opcode_dict['utype'] or op in opcode_dict['jtype'] 
+                             else True, ['opcode', 'funct3']) 
+        self.p.addConstraint(lambda op, rs1: rs1==0 # U and J type have no rs1
+                             if op in opcode_dict['utype'] or op in opcode_dict['jtype'] 
+                             else True, ['opcode', 'rs1']) 
+        self.p.addConstraint(lambda op, rs2: rs2==0 # U, I and J type have no rs1
+                             if op in opcode_dict['utype'] or op in opcode_dict['jtype']  or op in opcode_dict['itype']
+                             else True, ['opcode', 'rs2']) 
+        self.p.addConstraint(lambda op, f3, f7: f7==0 if not 
+                             (op in opcode_dict['itype'] and f3==5 or # select between srli and srai
+                              op in opcode_dict['rtype'] and (f3==0 or f3==5)) # special cases are sub and sra
+                              else True, ['opcode', 'funct3', 'funct7'])
+        self.p.addConstraint(lambda op, f3: f3 < 6 and f3 != 3 if op==0 
+                             else True, ['opcode', 'funct3']) # load commands have no 6,7 and no 3 funct3 value
+        self.p.addConstraint(lambda op, f3: f3<3 if op==8 
+                             else True, ['opcode', 'funct3']) # store commands have no funct3 values < 3
+        self.p.addConstraint(lambda op, f3: f3!=2 and f3!=3 if op in opcode_dict['btype']
+                             else True, ['opcode', 'funct3']) # branch commands have no 2, 3 funct3 value
+        self.p.addConstraint(lambda op, i: i==0 if op in opcode_dict['rtype'] else True, ['opcode', 'imm']) # Rtype no immmediate
+        self.p.addConstraint(lambda op, i: i<2**12 
+                             if op in opcode_dict['itype'] or op in opcode_dict['stype'] or op in opcode_dict['btype']
+                             else True, ['opcode', 'imm']) # I,S,B type instructions have only 12 bits for immediate
+        self.p.addConstraint(lambda op, i: (i%4)==0 if op==25 else True, ['opcode', 'imm']) # JALR immediate divisble by 4
+        self.p.addConstraint(lambda op, f3: f3==0 if op==25 else True, ['opcode', 'funct3']) # JALR immediate divisble by 4
+        
+    def solve(self):
+        self.solutions = self.p.getSolutions()
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
+    def get(self):
+        s = random.choice(self.solutions)
+        
+        imm = s['imm']
+        t, rd, r1, r2, f3, f7 = s['opcode'], s['rd'], s['rs1'], s['rs2'], s['funct3'], s['funct7']
+        i = 3 + (t << 2) + (rd << 7) + (f3 << 12) + (r1 << 15) + (r2 << 20) + (f7 << 25)
+        if t in opcode_dict['btype']:
+            imm_type = 'btype'
+        elif t in opcode_dict['itype']:
+            imm_type = 'itype'
+        elif t in opcode_dict['jtype']:
+            imm_type = 'jtype'
+        elif t in opcode_dict['rtype']:
+            imm_type = 'itype' # this is anyways constrained to 0
+        elif t in opcode_dict['stype']:
+            imm_type = 'stype'
+        elif t in opcode_dict['utype']:
+            imm_type = 'utype'
+        else:
+            print(f'solver returned an unknown opcode {t}')
+            exit(1)
+        return add_imm(imm_type, imm, i)
+        
