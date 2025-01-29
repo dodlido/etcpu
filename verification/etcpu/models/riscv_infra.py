@@ -236,14 +236,17 @@ def binary_array_to_int_reversed_2s_complement(binary_array: list) -> int:
     
     return result
 
-def add_imm(imm_type: str, param_value: str, running_sum: int)->int:
+def add_imm(imm_type: str, param_value: str, running_sum: int, special_itype: bool=False)->int:
     '''
     adds to the current running sum the 
     value specified by the given immediate
     '''
     param_int = int(param_value)
     if imm_type=='itype':
-        param_abs = twos_complement_to_int(int_to_twos_complement(param_int, 12))
+        if special_itype:
+            param_abs = twos_complement_to_int(int_to_twos_complement(param_int, 5))
+        else:
+            param_abs = twos_complement_to_int(int_to_twos_complement(param_int, 12))
         imm = param_abs<<20
     elif imm_type=='stype':
         param_abs = twos_complement_to_int(int_to_twos_complement(param_int, 12))
@@ -362,7 +365,10 @@ def inst_int2str(cmd_int: int)->str:
         return f'jal x{rd}, {imm}'
     # Itype inst
     elif opcode in itype:
-        imm = binary_array_to_int_reversed_2s_complement(inst_bin_arr[20:])
+        if funct3==5:
+            imm = binary_array_to_int_reversed_2s_complement(inst_bin_arr[20:25])
+        else:
+            imm = binary_array_to_int_reversed_2s_complement(inst_bin_arr[20:])
         if opcode==4: # register-immediate calculations
             if funct3==i_addi['funct3']:
                 return f'addi x{rd}, x{rs1}, {imm}'
@@ -374,6 +380,8 @@ def inst_int2str(cmd_int: int)->str:
                 return f'ori x{rd}, x{rs1}, {imm}'
             elif funct3==i_andi['funct3']:
                 return f'andi x{rd}, x{rs1}, {imm}'
+            elif funct3==i_sltiu['funct3']:
+                return f'sltiu x{rd}, x{rs1}, {imm}'
             elif funct3==i_slli['funct3'] and funct7==i_slli['funct7']:
                 return f'slli x{rd}, x{rs1}, {imm}'
             elif funct3==i_srli['funct3'] and funct7==i_srli['funct7']:
@@ -390,6 +398,10 @@ def inst_int2str(cmd_int: int)->str:
                 return f'lh x{rd}, {imm}(x{rs1})'
             elif funct3==i_lw['funct3']:
                 return f'lw x{rd}, {imm}(x{rs1})'
+            elif funct3==i_lbu['funct3']:
+                return f'lbu x{rd}, {imm}(x{rs1})'
+            elif funct3==i_lhu['funct3']:
+                return f'lhu x{rd}, {imm}(x{rs1})'
             else:
                 print(f'error, found a non-supported funct3=({funct3}) option for load instruction')
                 exit(1)
@@ -497,6 +509,16 @@ def inst_int2rgfexp(cmd_int: int, rgf_state: List[int], mm_state: List[int], nex
                 wd = rgf_state[rs1] + imm
             elif funct3==i_slti['funct3']:
                 wd = 1 if (rgf_state[rs1] < imm) else 0 
+            elif funct3==i_sltiu['funct3']:
+                rs1_arr = int_to_binary_array(rgf_state[rs1])
+                rs1_signbit = rs1_arr[31]
+                imm_signbit = 1 if imm < 0 else 0 
+                rs1_abs_val = binary_array_to_int(rs1_arr[:31])
+                imm_abs_val = binary_array_to_int(inst_bin_arr[20:32])
+                if rs1_signbit==imm_signbit:
+                    wd = 1 if (rs1_abs_val < imm_abs_val) else 0 
+                else:
+                    wd = 1 if rs1_signbit==1 else 0            
             elif funct3==i_xori['funct3']:
                 wd = rgf_state[rs1] ^ imm 
             elif funct3==i_ori['funct3']:
@@ -523,6 +545,12 @@ def inst_int2rgfexp(cmd_int: int, rgf_state: List[int], mm_state: List[int], nex
                 wd = half_word
             elif funct3==i_lw['funct3']:
                 wd = word
+            elif funct3==i_lbu['funct3']:
+                byte = word % (2**8)
+                wd = byte
+            elif funct3==i_lhu['funct3']:
+                half_word = word % (2**16)
+                wd = half_word
             else:
                 print(f'error, found a non-supported funct3=({funct3}) option for load instruction')
                 exit(1)
@@ -683,6 +711,7 @@ class InstGenerator:
                              else True, ['opcode', 'imm']) # I,S,B type instructions have only 12 bits for immediate
         self.p.addConstraint(lambda op, i: (i%4)==0 if op==25 else True, ['opcode', 'imm']) # JALR immediate divisble by 4
         self.p.addConstraint(lambda op, f3: f3==0 if op==25 else True, ['opcode', 'funct3']) # JALR immediate divisble by 4
+        self.p.addConstraint(lambda op, f3, i: i<2**5 if op==4 and f3==5 else True, ['opcode', 'funct3', 'imm'])
         
     def solve(self):
         self.solutions = self.p.getSolutions()
@@ -708,5 +737,7 @@ class InstGenerator:
         else:
             print(f'solver returned an unknown opcode {t}')
             exit(1)
-        return add_imm(imm_type, imm, i)
+        inst_int = add_imm(imm_type, imm, i, special_itype=(t==4 and f3==5))
+        inst_str = inst_int2str(inst_int)
+        return inst_int, inst_str
         

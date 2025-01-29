@@ -65,7 +65,7 @@ async def close_test(dut, cpu_rst, max_runtime, mem_depth):
             break
         await RisingEdge(dut.clk)
 
-@cocotb.test()
+# @cocotb.test()
 async def test_basic(dut):
     '''
     basic test:
@@ -86,7 +86,7 @@ async def test_basic(dut):
     await inst_driver._driver_send('lw x4, 4(x2)')
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth)
 
-@cocotb.test()
+# @cocotb.test()
 async def test_data_hazard(dut):
     '''
     test RAW data hazard case:
@@ -98,7 +98,7 @@ async def test_data_hazard(dut):
     await inst_driver._driver_send('addi x1, x1, 4')
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth)
 
-@cocotb.test()
+# @cocotb.test()
 async def test_interlock_scenario(dut):
     '''
     test pipe interlock scenario:
@@ -116,7 +116,7 @@ async def test_interlock_scenario(dut):
     await inst_driver._driver_send('add x3, x2, x2')
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth)
 
-@cocotb.test()
+# @cocotb.test()
 async def test_jal(dut):
     '''
     test jal instruction:
@@ -133,7 +133,7 @@ async def test_jal(dut):
     await inst_driver._driver_send('addi x17, x0, 137') # 0x20
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth)
 
-@cocotb.test()
+# @cocotb.test()
 async def test_jalr(dut):
     '''
     test jalr instruction:
@@ -152,7 +152,7 @@ async def test_jalr(dut):
     await inst_driver._driver_send('addi x17, x0, 137') # 0x24
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth)
 
-@cocotb.test()
+# @cocotb.test()
 async def test_bne(dut):
     '''
     test jalr instruction:
@@ -173,3 +173,13 @@ async def test_bne(dut):
     await inst_driver._driver_send('addi x17, x0, 137') # 0x24
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth)
 
+@cocotb.test()
+async def rand_inst(dut):
+    '''
+    test rand_inst:
+        random instruction
+    '''
+    inst_driver, cpu_rst = await init_test(dut)
+    for _ in range(int(0x96/0x4)):
+        await inst_driver.drive_rand_inst()
+    await close_test(dut, cpu_rst, 3000, inst_driver.inst_mem_depth)

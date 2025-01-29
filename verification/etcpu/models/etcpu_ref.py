@@ -4,7 +4,8 @@ from cocotb.triggers import RisingEdge, ClockCycles, ReadOnly
 from cocotb_bus.bus import Bus
 from cocotb_bus.drivers import BusDriver
 from cocotb_bus.monitors import BusMonitor, Monitor
-from models.riscv_infra import inst_str2int, inst_int2str, inst_int2rgfexp, inst_int2mmexp, inst_int2pcexp
+from models.riscv_infra import inst_str2int, inst_int2str, inst_int2rgfexp, inst_int2mmexp, inst_int2pcexp, InstGenerator
+from models.riscv_infra import *
 
 class RGFTrans(object):
     '''
@@ -74,7 +75,9 @@ class IMDriver(BusDriver):
         self.bus.wen.value = 0 
         self.bus.addr.value = 0
         self.bus.dat.value = 0 
-    
+        self.inst_generator = InstGenerator()
+        self.inst_generator.solve()
+
     async def _driver_send(self, cmd: str, sync = True):
         '''
         gets an RV32I command as a string
@@ -87,7 +90,6 @@ class IMDriver(BusDriver):
         self.bus.wen.value = 1 
         self.bus.addr.value = trans.address
         self.bus.dat.value = trans.inst_int
-        
         # Update running address
         self.running_addr = 0 if ((self.running_addr + 4) >> 2) == self.inst_mem_depth else self.running_addr + 4 
 
@@ -95,6 +97,13 @@ class IMDriver(BusDriver):
         await RisingEdge(self.clock)
         self.bus.wen.value = 0
     
+    async def drive_rand_inst(self):
+        '''
+        drive a random valid RV32I instruction
+        '''
+        _, rand_inst = self.inst_generator.get()
+        await self._driver_send(rand_inst)
+
     async def _load_nops(self, num_of_nops: int):
         '''
             use num_of_nops=-1 to load the 
