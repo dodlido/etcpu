@@ -24,6 +24,9 @@ parameter bit [4-1:0] ALU_OR    = 4'b0110 ; // {func7 , func3[2:0]}
 parameter bit [4-1:0] ALU_XOR   = 4'b0100 ; // {func7 , func3[2:0]} 
 parameter bit [4-1:0] ALU_SLT   = 4'b0010 ; // {func7 , func3[2:0]} 
 parameter bit [4-1:0] ALU_SLTU  = 4'b0011 ; // {func7 , func3[2:0]} 
+parameter bit [4-1:0] ALU_SRL   = 4'b0101 ; // {func7 , func3[2:0]} 
+parameter bit [4-1:0] ALU_SRA   = 4'b1101 ; // {func7 , func3[2:0]} 
+parameter bit [4-1:0] ALU_SLL   = 4'b0001 ; // {func7 , func3[2:0]} 
 // B-type //
 parameter bit [3-1:0] ALU_BEQ   =  3'b000 ; // func3[2:0]
 parameter bit [3-1:0] ALU_BNE   =  3'b001 ; // func3[2:0]

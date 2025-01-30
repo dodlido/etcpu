@@ -13,7 +13,7 @@ async def reset_dut(clock, rst_n, cycles):
     rst_n.value = 1
     rst_n._log.debug("Reset complete")
 
-async def init_test(dut)->IMDriver:
+async def init_test(dut)->Tuple[IMDriver, any]:
     # 1. Declare Instruction Driver
     inst_driver = IMDriver(dut, 'inst_mem_wr', dut.clk, 256)
     
@@ -21,7 +21,7 @@ async def init_test(dut)->IMDriver:
     await cocotb.start(Clock(dut.clk, 1, 'ns').start())
     
     # 3. Reset to CPU, hold it active for a long time
-    cpu_rst = cocotb.start_soon(reset_dut(dut.clk, dut.rst_n_cpu, int(1.2*inst_driver.inst_mem_depth)))
+    cpu_rst = cocotb.start_soon(reset_dut(dut.clk, dut.rst_n_cpu, int(2.2*inst_driver.inst_mem_depth)))
     
     # 4. Wait for environment reset to complete
     await cocotb.start_soon(reset_dut(dut.clk, dut.rst_n_env, 10))
@@ -32,7 +32,7 @@ async def init_test(dut)->IMDriver:
     # 6. Start monitors and scoreboards
     pc_scoreboard, rgf_scoreboard, mm_scoreboard = PCScoreboard(), RGFScoreboard(), MMScoreboard(32)
     inst_monitor = IMMonitor(dut, 'inst_mem_wr', dut.clk)
-    main_mem_monitor = MMMonitor(dut, 'main_mem', dut.clk)
+    main_mem_monitor = MMMonitor(dut, 'main_mem', dut.clk, mm_scoreboard)
     rgf_monitor = RGFMonitor(
         rgf_scoreboard, 
         dut.i_etcpu_top.i_decode_top.i_regfile.we,
@@ -61,7 +61,7 @@ async def close_test(dut, cpu_rst, max_runtime, mem_depth):
 
     # 7. Kill the test after some time or edge of instruction memory reached
     for _ in range(max_runtime):
-        if dut.inst_mem_rd_addr.value==(mem_depth << 2):
+        if dut.inst_mem_rd_addr.value==((mem_depth << 2)-4):
             break
         await RisingEdge(dut.clk)
 
@@ -173,13 +173,41 @@ async def test_bne(dut):
     await inst_driver._driver_send('addi x17, x0, 137') # 0x24
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth)
 
+# @cocotb.test()
+async def test_srai(dut):
+    '''
+    test srai direct test:
+        1. addi x24, x24, 3
+        2. nop X5 
+        3. srai x22, x24, 0
+    '''
+    inst_driver, cpu_rst = await init_test(dut)
+    await inst_driver._driver_send('addi x24, x24, 3')
+    await inst_driver._load_nops(5) 
+    await inst_driver._driver_send('srai x22, x24, 0')
+    await close_test(dut, cpu_rst, 300, inst_driver.inst_mem_depth)
+
+# @cocotb.test()
+async def test_srl(dut):
+    '''
+    test srai direct test:
+        1. addi x27, x23, 10
+        2. nop X5 
+        3. srl x11, x27, x10
+    '''
+    inst_driver, cpu_rst = await init_test(dut)
+    await inst_driver._driver_send('addi x27, x23, 10')
+    await inst_driver._load_nops(5) 
+    await inst_driver._driver_send('srl x11, x27, x10')
+    await close_test(dut, cpu_rst, 300, inst_driver.inst_mem_depth)
+
 @cocotb.test()
-async def rand_inst(dut):
+async def test_rand_inst(dut):
     '''
     test rand_inst:
         random instruction
     '''
     inst_driver, cpu_rst = await init_test(dut)
-    for _ in range(int(0x96/0x4)):
+    for _ in range(inst_driver.inst_mem_depth):
         await inst_driver.drive_rand_inst()
-    await close_test(dut, cpu_rst, 3000, inst_driver.inst_mem_depth)
+    await close_test(dut, cpu_rst, 300, inst_driver.inst_mem_depth)

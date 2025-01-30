@@ -2,7 +2,7 @@
 // etcpu_top.v 
 //
 
-module etcpu_top (
+module etcpu_top #(INST_MEM_DEPTH=256) (
    // General Signals //
    // --------------- //
    input  logic          clk              , // clock signal
@@ -216,7 +216,10 @@ memory_access_top i_memory_access_top (
 // FFs // 
 // --- //
 // PC register //
-always_ff @(posedge clk) if (!rst_n) pc                 <=    0 ;                                                       else pc                 <= pc_next                 ; 
+always_ff @(posedge clk) if (!rst_n) pc                 <=    0 ;                                                       else pc <= pc_next[$clog2(INST_MEM_DEPTH)+2-1:0]   ; 
+// PC value always takes the LSbits of pc_next determined by INST_MEM_DEPTH
+// parameter. This is done to allow working with smaller instruction address
+// space thus saving test time
 // IF --> ID // 
 always_ff @(posedge clk) if (!rst_n) if2id_pc           <=    0 ;                                                       else if2id_pc           <= pc                      ; 
 always_ff @(posedge clk) if (!rst_n) if2id_inst         <=    0 ;  else if (intrlock_bubble) if2id_inst <= if2id_inst ; else if2id_inst         <= if2id_inst_next         ; 

@@ -25,6 +25,9 @@ logic [32-1:0] mask_rtype_or     ;
 logic [32-1:0] mask_rtype_xor    ; 
 logic [32-1:0] mask_rtype_slt    ; 
 logic [32-1:0] mask_rtype_sltu   ; 
+logic [32-1:0] mask_rtype_srl    ; 
+logic [32-1:0] mask_rtype_sra    ; 
+logic [32-1:0] mask_rtype_sll    ; 
 logic [32-1:0] mask_rtype        ; 
 // B-type Masks //
 logic [32-1:0] mask_btype_eq     ; 
@@ -83,6 +86,9 @@ assign mask_rtype_or   = {32{{funct7, funct3}==ALU_OR   }} ;
 assign mask_rtype_xor  = {32{{funct7, funct3}==ALU_XOR  }} ; 
 assign mask_rtype_slt  = {32{{funct7, funct3}==ALU_SLT  }} ; 
 assign mask_rtype_sltu = {32{{funct7, funct3}==ALU_SLTU }} ; 
+assign mask_rtype_srl  = {32{{funct7, funct3}==ALU_SRL  }} ; 
+assign mask_rtype_sra  = {32{{funct7, funct3}==ALU_SRA  }} ; 
+assign mask_rtype_sll  = {32{{funct7, funct3}==ALU_SLL  }} ; 
 // B-type //
 assign mask_btype_ltu  = {32{funct3==ALU_BGEU}} ; 
 assign mask_btype_lt   = {32{(funct3==ALU_BLT)|(funct3==ALU_BGE)}} ; 
@@ -106,7 +112,10 @@ assign res_rtype = ( mask_rtype_add  & res_add  ) |
                    ( mask_rtype_or   & res_or   ) |
                    ( mask_rtype_xor  & res_xor  ) |
                    ( mask_rtype_slt  & res_slt  ) |
-                   ( mask_rtype_sltu & res_sltu ) ;
+                   ( mask_rtype_sltu & res_sltu ) |
+                   ( mask_rtype_sll  & res_sll  ) |
+                   ( mask_rtype_srl  & res_srl  ) |
+                   ( mask_rtype_sra  & res_sra  ) ;
 
 assign res_btype = ( mask_btype_ltu  & res_sltu ) | 
                    ( mask_btype_lt   & res_slt  ) | 

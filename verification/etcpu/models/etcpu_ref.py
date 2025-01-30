@@ -39,6 +39,9 @@ class MMTrans(object):
         log_data = hex(self.data)
         log_addr = hex(self.address)
         return f' : MAIN_MEM[{log_addr}] <= {log_data}'
+    
+    def __eq__(self, other):
+        return self.data==other.data and self.address==other.address
 
 class IMTrans(object):
     '''
@@ -135,17 +138,18 @@ class Scoreboard:
     def add_actual(self, trans):
         self.actual_trns.append(trans)
     
-    def compare(self):
+    def compare(self)->bool:
         actual_trns = self.actual_trns.pop(0)
         if len(self.expected_trns)<1:
             cocotb.log.error(f'{self.name.ljust(16)} found actual transaction {actual_trns.get_log_message()} with no matching expected transaction')
-            return
+            return False
         expected_trns = self.expected_trns.pop(0)
         if (expected_trns == actual_trns):
             cocotb.log.info(f"{self.name.ljust(16)} {expected_trns.get_log_message()} matches expected value")
+            return True
         else:
             cocotb.log.error(f"{self.name.ljust(16)} MISMATCH!!\nexpected {expected_trns.get_log_message()} but got {actual_trns.get_log_message()}")
-            assert False, f'Test failed due to a found mismatch'
+            return False
 
 class MMScoreboard(Scoreboard):
     '''
@@ -160,7 +164,7 @@ class MMScoreboard(Scoreboard):
     def add_expected(self, trans: MMTrans):
         super().add_expected(trans)
     def compare(self):
-        super().compare()
+        return super().compare()
 
 class RGFScoreboard(Scoreboard):
     '''
@@ -175,7 +179,7 @@ class RGFScoreboard(Scoreboard):
     def add_expected(self, trans: RGFTrans):
         super().add_expected(trans)
     def compare(self):
-        super().compare()
+        return super().compare()
 
 class PCScoreboard(Scoreboard):
     '''
@@ -185,11 +189,12 @@ class PCScoreboard(Scoreboard):
     '''
     def __init__(self):
         self.expected_pc = 0 
-    def compare(self, actual_pc):
+    def compare(self, actual_pc)->bool:
         if (self.expected_pc != actual_pc):
             name = 'PCSB'.ljust(16)
             cocotb.log.error(f"{name} MISMATCH!!\nexpected PC={hex(self.expected_pc)} but got PC={hex(actual_pc)}")
-            assert False, f'Test failed due to a found mismatch'
+            return False
+        return True
 
 class RGFMonitor(Monitor):
     '''
@@ -217,7 +222,14 @@ class RGFMonitor(Monitor):
                 rgf_wb_inst = IMTrans(int(self.wb_inst.value), int(self.wb_pc.value))
                 self.log.info(f'{self.title} {rgf_wr_trans.get_log_message()} \n-->WB instruction{rgf_wb_inst.get_log_message()}')
                 self.scoreboard.add_actual(rgf_wr_trans)
-                self.scoreboard.compare()
+                equal = self.scoreboard.compare()
+                if not equal:
+                    rgf_state_str = 'RGF state at failure point:\n'
+                    for i, reg in enumerate(self.scoreboard.expected_state):
+                        rgf_state_str += f'x{str(i).ljust(2)} = {hex(reg)}\n'
+                    self.log.warning(rgf_state_str)
+                    await ClockCycles(self.clock, 5)
+                    assert False
                 self._recv(rgf_wr_trans)
             await RisingEdge(self.clock)
 
@@ -252,8 +264,9 @@ class MMMonitor(BusMonitor):
     '''
     _signals = ['cs', 'wen', 'addr', 'dat_in']
     
-    def __init__(self, entity, name, clock, reset=None, reset_n=None, callback=None, event=None, **kwargs):
+    def __init__(self, entity, name, clock, scoreboard: MMScoreboard, reset=None, reset_n=None, callback=None, event=None, **kwargs):
         self.title = 'MMM'.ljust(16)
+        self.scoreboard = scoreboard
         super().__init__(entity, name, clock, reset, reset_n, callback, event, **kwargs)
     
     async def _monitor_recv(self):
@@ -262,6 +275,11 @@ class MMMonitor(BusMonitor):
             if self.bus.wen.value==1 and self.bus.cs.value==1:
                 trans = MMTrans(int(self.bus.dat_in.value), int(self.bus.addr.value))
                 self.log.info(f'{self.title} {trans.get_log_message()}')
+                self.scoreboard.add_actual(trans)
+                equal = self.scoreboard.compare()
+                if not equal:
+                    await ClockCycles(self.clock, 5)
+                    assert False
                 self._recv(trans)
             await RisingEdge(self.clock)
 
@@ -294,7 +312,10 @@ class PCMonitor(Monitor):
                     self.log.info(f'{self.title}  : current instruction is - {padded_inst_str} @ {hex(int(self.pc.value))}')
                 
                 # PC Scoreboard update
-                self.pc_scoreboard.compare(int(self.pc.value))
+                equal = self.pc_scoreboard.compare(int(self.pc.value))
+                if not equal:
+                    await ClockCycles(self.clock, 5)
+                    assert False
                 next_pc, flush = inst_int2pcexp(
                     int(self.inst.value), self.rgf_scoreboard.expected_state, self.pc_scoreboard.expected_pc, int(self.intrlock.value), self.inst_mem_depth)
                 # TODO: this assumes that the pipe interlock implementation is correct

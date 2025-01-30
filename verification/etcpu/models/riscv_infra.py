@@ -473,10 +473,10 @@ def inst_int2rgfexp(cmd_int: int, rgf_state: List[int], mm_state: List[int], nex
         elif funct3==i_sub['funct3'] and funct7==i_sub['funct7']:
             wd = rgf_state[rs1] - rgf_state[rs2]
         elif funct3==i_sll['funct3'] and funct7==i_sll['funct7']:
-            wd = rgf_state[rs1] << rgf_state[rs2]
-        elif funct3==i_slt['funct3'] and funct7==i_slt['funct7']:
-            wd = 1 if (rgf_state[rs1] < rgf_state[rs2]) else 0
+            wd = rgf_state[rs1] << (rgf_state[rs2] % 32)
         elif funct3==i_sltu['funct3'] and funct7==i_sltu['funct7']:
+            wd = 1 if (rgf_state[rs1] < rgf_state[rs2]) else 0
+        elif funct3==i_slt['funct3'] and funct7==i_slt['funct7']:
             rs1_arr = int_to_binary_array(rgf_state[rs1])
             rs2_arr = int_to_binary_array(rgf_state[rs2])
             rs1_signbit = rs1_arr[31]
@@ -490,9 +490,9 @@ def inst_int2rgfexp(cmd_int: int, rgf_state: List[int], mm_state: List[int], nex
         elif funct3==i_xor['funct3'] and funct7==i_xor['funct7']:
             wd = rgf_state[rs1] ^ rgf_state[rs2]
         elif funct3==i_srl['funct3'] and funct7==i_srl['funct7']:
-            wd = (rgf_state[rs1] & 0xFFFFFFFF) >> rgf_state[rs2]
+            wd = (rgf_state[rs1] & 0xFFFFFFFF) >> (rgf_state[rs2] % 32)
         elif funct3==i_sra['funct3'] and funct7==i_sra['funct7']:
-            wd = rgf_state[rs1] >> rgf_state[rs2]
+            wd = rgf_state[rs1] >> (rgf_state[rs2] % 32)
         elif funct3==i_or['funct3'] and funct7==i_or['funct7']:
             wd = rgf_state[rs1] | rgf_state[rs2]
         elif funct3==i_and['funct3'] and funct7==i_and['funct7']:
@@ -503,13 +503,14 @@ def inst_int2rgfexp(cmd_int: int, rgf_state: List[int], mm_state: List[int], nex
     # Itype Instruction
     elif opcode in itype:
         imm = binary_array_to_int_reversed_2s_complement(inst_bin_arr[20:])
+        shift_imm = binary_array_to_int_reversed_2s_complement(inst_bin_arr[20:25])
         wen = True
         if opcode==4: # register-immediate calculations
             if funct3==i_addi['funct3']:
                 wd = rgf_state[rs1] + imm
-            elif funct3==i_slti['funct3']:
-                wd = 1 if (rgf_state[rs1] < imm) else 0 
             elif funct3==i_sltiu['funct3']:
+                wd = 1 if (rgf_state[rs1] < imm) else 0 
+            elif funct3==i_slti['funct3']:
                 rs1_arr = int_to_binary_array(rgf_state[rs1])
                 rs1_signbit = rs1_arr[31]
                 imm_signbit = 1 if imm < 0 else 0 
@@ -526,11 +527,11 @@ def inst_int2rgfexp(cmd_int: int, rgf_state: List[int], mm_state: List[int], nex
             elif funct3==i_andi['funct3']:
                 wd = rgf_state[rs1] & imm 
             elif funct3==i_slli['funct3'] and funct7==i_slli['funct7']:
-                wd = rgf_state[rs1] << imm 
+                wd = rgf_state[rs1] << shift_imm 
             elif funct3==i_srli['funct3'] and funct7==i_srli['funct7']:
-                wd = (rgf_state[rs1] & 0xFFFFFFFF) >> imm 
+                wd = (rgf_state[rs1] & 0xFFFFFFFF) >> shift_imm 
             elif funct3==i_srai['funct3'] and funct7==i_srai['funct7']:
-                wd = rgf_state[rs1] >> imm 
+                wd = rgf_state[rs1] >> shift_imm 
             else:
                 print(f'error, found a non-existing funct3=({funct3}) and funct7=({funct7}) combination for register-immediate operation')
                 exit(1)
@@ -577,6 +578,11 @@ def inst_int2rgfexp(cmd_int: int, rgf_state: List[int], mm_state: List[int], nex
         print(f'error, found a non-supported opcode {opcode}')
         exit(1) 
     # update the written register if there is any
+    if wa==0: # don't expect write operations to the 0 register
+        wen = 0
+    if wd < 0:
+         wd = (1 << 32) + wd
+    wd = wd % 2**32
     if wen:
         rgf_next_state[wa] = wd
     return wen, wa, wd, rgf_next_state
@@ -664,7 +670,7 @@ def inst_int2pcexp(cmd_int: int, rgf_state: List[int], curr_pc: int, intrlock: i
         next_pc = curr_pc + 4 
         flush = False
     
-    next_pc = next_pc % mem_depth
+    next_pc = next_pc % (mem_depth << 2)
 
     return next_pc, flush
 
@@ -712,6 +718,7 @@ class InstGenerator:
         self.p.addConstraint(lambda op, i: (i%4)==0 if op==25 else True, ['opcode', 'imm']) # JALR immediate divisble by 4
         self.p.addConstraint(lambda op, f3: f3==0 if op==25 else True, ['opcode', 'funct3']) # JALR immediate divisble by 4
         self.p.addConstraint(lambda op, f3, i: i<2**5 if op==4 and f3==5 else True, ['opcode', 'funct3', 'imm'])
+        self.p.addConstraint(lambda op: op==4 or op==12 if True else True, ['opcode'])
         
     def solve(self):
         self.solutions = self.p.getSolutions()

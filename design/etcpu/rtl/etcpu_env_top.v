@@ -30,7 +30,7 @@ logic [32-1:0] inst_mem_addr             ;
 
 // CPU core instance //
 // ----------------- //
-etcpu_top i_etcpu_top (
+etcpu_top #(.INST_MEM_DEPTH(INST_MEM_DEPTH)) i_etcpu_top (
    // General Signals //
    .clk              (clk              ), // i, [1] X logic  , clock signal
    .rst_n            (rst_n_cpu        ), // i, [1] X logic  , active low reset
