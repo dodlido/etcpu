@@ -1,11 +1,12 @@
+from typing import Tuple
 import cocotb
 from cocotb.clock import Clock
 import cocotb.regression
 import cocotb.utils
-from cocotb.triggers import RisingEdge, ClockCycles
+from cocotb.triggers import RisingEdge
 from models.etcpu_ref import *
+import logging
 
-# Reset DUT
 async def reset_dut(clock, rst_n, cycles):
     rst_n.value = 0
     for _ in range(cycles):
@@ -14,8 +15,12 @@ async def reset_dut(clock, rst_n, cycles):
     rst_n._log.debug("Reset complete")
 
 async def init_test(dut)->Tuple[IMDriver, any]:
+
+    # 0. logging level
+    log_level = logging.INFO
+
     # 1. Declare Instruction Driver
-    inst_driver = IMDriver(dut, 'inst_mem_wr', dut.clk, 256)
+    inst_driver = IMDriver(dut, 'inst_mem_wr', dut.clk, dut.INST_MEM_DEPTH.value)
     
     # 2. Start clock
     await cocotb.start(Clock(dut.clk, 1, 'ns').start())
@@ -31,8 +36,8 @@ async def init_test(dut)->Tuple[IMDriver, any]:
 
     # 6. Start monitors and scoreboards
     pc_scoreboard, rgf_scoreboard, mm_scoreboard = PCScoreboard(), RGFScoreboard(), MMScoreboard(32)
-    inst_monitor = IMMonitor(dut, 'inst_mem_wr', dut.clk)
-    main_mem_monitor = MMMonitor(dut, 'main_mem', dut.clk, mm_scoreboard)
+    inst_monitor = IMMonitor(dut, 'inst_mem_wr', dut.clk, log_level)
+    main_mem_monitor = MMMonitor(dut, 'main_mem', dut.clk, mm_scoreboard, log_level)
     rgf_monitor = RGFMonitor(
         rgf_scoreboard, 
         dut.i_etcpu_top.i_decode_top.i_regfile.we,
@@ -40,7 +45,8 @@ async def init_test(dut)->Tuple[IMDriver, any]:
         dut.i_etcpu_top.i_decode_top.i_regfile.wd,
         dut.i_etcpu_top.i_decode_top.wb_inst, 
         dut.i_etcpu_top.i_decode_top.wb_pc, 
-        dut.clk
+        dut.clk,
+        log_level
     )
     pc_monitor = PCMonitor(
         dut.clk,
@@ -51,17 +57,20 @@ async def init_test(dut)->Tuple[IMDriver, any]:
         dut.i_etcpu_top.intrlock_bubble,
         pc_scoreboard,
         rgf_scoreboard,
-        mm_scoreboard
+        mm_scoreboard,
+        log_level
     )
     return inst_driver, cpu_rst
 
 async def close_test(dut, cpu_rst, max_runtime, mem_depth):
+
     # 6. Wait for CPU reset to end
     await cpu_rst
 
     # 7. Kill the test after some time or edge of instruction memory reached
     for _ in range(max_runtime):
         if dut.inst_mem_rd_addr.value==((mem_depth << 2)-4):
+            cocotb.logging.shutdown()
             break
         await RisingEdge(dut.clk)
 
@@ -210,4 +219,4 @@ async def test_rand_inst(dut):
     inst_driver, cpu_rst = await init_test(dut)
     for _ in range(inst_driver.inst_mem_depth):
         await inst_driver.drive_rand_inst()
-    await close_test(dut, cpu_rst, 300, inst_driver.inst_mem_depth)
+    await close_test(dut, cpu_rst, 2000, inst_driver.inst_mem_depth)

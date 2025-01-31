@@ -5,7 +5,7 @@ from cocotb_bus.bus import Bus
 from cocotb_bus.drivers import BusDriver
 from cocotb_bus.monitors import BusMonitor, Monitor
 from models.riscv_infra import inst_str2int, inst_int2str, inst_int2rgfexp, inst_int2mmexp, inst_int2pcexp, InstGenerator
-from models.riscv_infra import *
+import logging
 
 class RGFTrans(object):
     '''
@@ -190,8 +190,8 @@ class PCScoreboard(Scoreboard):
     def __init__(self):
         self.expected_pc = 0 
     def compare(self, actual_pc)->bool:
+        name = 'PCSB'.ljust(16)
         if (self.expected_pc != actual_pc):
-            name = 'PCSB'.ljust(16)
             cocotb.log.error(f"{name} MISMATCH!!\nexpected PC={hex(self.expected_pc)} but got PC={hex(actual_pc)}")
             return False
         return True
@@ -202,7 +202,7 @@ class RGFMonitor(Monitor):
         1. Listens to RGF write-enalbe, write address and write data signals
         2. Logs valid write transactions to the CPU's register file
     '''
-    def __init__(self, scoreboard: RGFScoreboard, rgf_wen, rgf_wa, rgf_wd, wb_inst, wb_pc, clock, callback=None, event=None):
+    def __init__(self, scoreboard: RGFScoreboard, rgf_wen, rgf_wa, rgf_wd, wb_inst, wb_pc, clock, log_level, callback=None, event=None):
         super().__init__(callback, event)
         self.scoreboard = scoreboard
         self.wen = rgf_wen
@@ -212,6 +212,7 @@ class RGFMonitor(Monitor):
         self.wb_pc = wb_pc
         self.clock = clock
         self.title = 'RGFM'.ljust(16)
+        self.log.setLevel(log_level)
     
     async def _monitor_recv(self):
         while True:
@@ -241,9 +242,10 @@ class IMMonitor(BusMonitor):
     '''
     _signals = ['wen', 'addr', 'dat']
 
-    def __init__(self, entity, name, clock, reset=None, reset_n=None, callback=None, event=None, **kwargs):
-        self.title = 'MMM'.ljust(16)
+    def __init__(self, entity, name, clock, log_level, reset=None, reset_n=None, callback=None, event=None, **kwargs):
+        self.title = 'IMM'.ljust(16)
         super().__init__(entity, name, clock, reset, reset_n, callback, event, **kwargs)
+        self.log.setLevel(log_level)
 
     async def _monitor_recv(self):
         while True:
@@ -252,7 +254,7 @@ class IMMonitor(BusMonitor):
                 # Build found transaction
                 trans = IMTrans(int(self.bus.dat.value), int(self.bus.addr.value))
                 if trans.inst_str!='nop':
-                    self.log.info(f'{self.title} {trans.get_log_message()}')
+                    self.log.debug(f'{self.title} {trans.get_log_message()}')
                     
                 self._recv(trans)
             await RisingEdge(self.clock)
@@ -264,10 +266,11 @@ class MMMonitor(BusMonitor):
     '''
     _signals = ['cs', 'wen', 'addr', 'dat_in']
     
-    def __init__(self, entity, name, clock, scoreboard: MMScoreboard, reset=None, reset_n=None, callback=None, event=None, **kwargs):
+    def __init__(self, entity, name, clock, scoreboard: MMScoreboard, log_level, reset=None, reset_n=None, callback=None, event=None, **kwargs):
         self.title = 'MMM'.ljust(16)
         self.scoreboard = scoreboard
         super().__init__(entity, name, clock, reset, reset_n, callback, event, **kwargs)
+        self.log.setLevel(log_level)
     
     async def _monitor_recv(self):
         while True:
@@ -289,7 +292,7 @@ class PCMonitor(Monitor):
         1. Listens to program counter and instruction from DUT
         2. Logs valid instructions
     '''
-    def __init__(self, clock, rst_n, pc, inst, inst_mem_depth, intrlock, pc_scoreboard: PCScoreboard, rgf_scoreboard: RGFScoreboard, mm_scoreboard: MMScoreboard, callback=None, event=None):
+    def __init__(self, clock, rst_n, pc, inst, inst_mem_depth, intrlock, pc_scoreboard: PCScoreboard, rgf_scoreboard: RGFScoreboard, mm_scoreboard: MMScoreboard, log_level, callback=None, event=None):
         super().__init__(callback, event)
         self.clock = clock
         self.rst_n = rst_n
@@ -301,6 +304,7 @@ class PCMonitor(Monitor):
         self.mm_scoreboard = mm_scoreboard
         self.intrlock = intrlock
         self.title = 'PCM'.ljust(16)
+        self.log.setLevel(log_level)
     
     async def _monitor_recv(self):
         while True:

@@ -2,7 +2,7 @@
 // etcpu_env_top.v
 //
 
-module etcpu_env_top #(INST_MEM_DEPTH=256, MAIN_MEM_DEPTH=32)(
+module etcpu_env_top #(INST_MEM_DEPTH=1024, MAIN_MEM_DEPTH=32)(
    // General //
    // ------- //
    input logic          clk              , 

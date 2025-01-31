@@ -679,7 +679,7 @@ class InstGenerator:
         self.solutions = None
         self.p = constraint.Problem()
         self.p.addVariable('opcode', (opcode_dict['btype'] + opcode_dict['itype'] + opcode_dict['jtype'] 
-                            + opcode_dict['rtype'] + opcode_dict['stype'] + opcode_dict['utype'])) # bits 6:2 of opcode
+                            + opcode_dict['rtype'] + opcode_dict['stype'])) # bits 6:2 of opcode TODO: add utype after finishing rgfexp implementation
         self.p.addVariable('rd', range(0,32))
         self.p.addVariable('funct3', range(0,8))
         self.p.addVariable('rs1', range(0,32))
@@ -715,10 +715,9 @@ class InstGenerator:
         self.p.addConstraint(lambda op, i: i<2**12 
                              if op in opcode_dict['itype'] or op in opcode_dict['stype'] or op in opcode_dict['btype']
                              else True, ['opcode', 'imm']) # I,S,B type instructions have only 12 bits for immediate
-        self.p.addConstraint(lambda op, i: (i%4)==0 if op==25 else True, ['opcode', 'imm']) # JALR immediate divisble by 4
-        self.p.addConstraint(lambda op, f3: f3==0 if op==25 else True, ['opcode', 'funct3']) # JALR immediate divisble by 4
+        self.p.addConstraint(lambda op, i: (i%4)==0 and i!=0 if op==25 or op==27 or op==24 else True, ['opcode', 'imm']) # JALR, JAL, Branches immediate divisble by 4
+        self.p.addConstraint(lambda op, f3: f3==0 if op==25 or op==27 else True, ['opcode', 'funct3']) # JALR, JAL funct3 is 0
         self.p.addConstraint(lambda op, f3, i: i<2**5 if op==4 and f3==5 else True, ['opcode', 'funct3', 'imm'])
-        self.p.addConstraint(lambda op: op==4 or op==12 if True else True, ['opcode'])
         
     def solve(self):
         self.solutions = self.p.getSolutions()
