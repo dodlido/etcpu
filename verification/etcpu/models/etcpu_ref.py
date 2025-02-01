@@ -131,9 +131,11 @@ class Scoreboard:
         self.actual_trns = []
         self.expected_state = [0] * depth
         self.name = name
+        self.lock_expected = False
 
     def add_expected(self, trans):
-        self.expected_trns.append(trans)
+        if not self.lock_expected:
+            self.expected_trns.append(trans)
     
     def add_actual(self, trans):
         self.actual_trns.append(trans)
@@ -150,6 +152,13 @@ class Scoreboard:
         else:
             cocotb.log.error(f"{self.name.ljust(16)} MISMATCH!!\nexpected {expected_trns.get_log_message()} but got {actual_trns.get_log_message()}")
             return False
+    
+    def is_empty(self):
+        if len(self.expected_trns)!=0:
+            cocotb.log.error(f'{self.name.ljust(16)} SCOREBOARD NOT EMPTY, {len(self.expected_trns)} remaining expected transactions:')
+            for i, trns in enumerate(self.expected_trns):
+                cocotb.log.info(f' --> TRNS #{i} {trns.get_log_message()}')
+            assert False
 
 class MMScoreboard(Scoreboard):
     '''

@@ -1,4 +1,5 @@
 
-1. main memory depth as a parameter in the environment (not sure how this works??)
-2. RGFSB should not expect a write on a exc_main event
-3. RTL should not write data to a register after such an exception as well
+1. Clean riscv infra: make instruction a class 
+2. Find out how to run certain tests and not others, or generate multiple tests
+3. Find out how to create regressions and maybe some sort of CICD process
+4. Consider an approach to functional coverage

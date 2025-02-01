@@ -71,7 +71,7 @@ assign mem_wen_int = opcode==OP_STORE ; // write enable in store instructions on
 assign wb_sel_mem = opcode==OP_LOAD ; 
 assign wb_sel_pc = opcode==OP_JAL | opcode==OP_JALR ; 
 assign wb_dat = wb_sel_mem ? mem_dat_out : wb_sel_pc ? (wb_pc + 4) : ex_dat ; 
-assign wb_inst = ex_inst ; 
+assign wb_inst = exc_main_addr_mis | exc_main_addr_oob ? BUBBLE : ex_inst ; 
 assign wb_pc = ex_pc ; 
 
 // Memory interface //

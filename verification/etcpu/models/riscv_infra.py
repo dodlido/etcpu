@@ -536,8 +536,10 @@ def inst_int2rgfexp(cmd_int: int, rgf_state: List[int], mm_state: List[int], nex
                 print(f'error, found a non-existing funct3=({funct3}) and funct7=({funct7}) combination for register-immediate operation')
                 exit(1)
         elif opcode==0:
-            addr = (rgf_state[rs1] + imm) >> 2
-            word = mm_state[addr]
+            byte_addr = rgf_state[rs1] + imm
+            word_addr = byte_addr >> 2 
+            wen = (byte_addr % 4 == 0) and (word_addr  < len(mm_state))
+            word = mm_state[word_addr]
             if funct3==i_lb['funct3']:
                 byte = word % (2**8)
                 wd = byte
