@@ -2,38 +2,73 @@
 // etcpu_top.v 
 //
 
-module etcpu_top #(INST_MEM_DEPTH=256) (
+module etcpu_top #(
+   // Parameters //
+   // ---------- //
+   parameter  int INST_MEM_BYTE_ADD_W =  8 , // Instruction memory Byte address width [bits]
+   parameter  int MAIN_MEM_BYTE_ADD_W =  8 , // Main memory Byte address width [bits]
+   parameter  int APB_ADD_W           =  3 , // APB's address bus width [bits]
+   parameter  int APB_DAT_W           = 32 , // APB's data bus width [bits]
+   // Derived parameters //
+   // ------------------ //
+   localparam int APB_STRB_W     = int'(APB_DAT_W/8)   // APB's strobe bus width [bits]
+)(
    // General Signals //
    // --------------- //
-   input  logic          clk              , // clock signal
-   input  logic          rst_n            , // active low reset
-   // ----------------------------------------------------------------- //
+   input  logic                  clk                , // clock signal
+   input  logic                  rst_n              , // active low reset
+
+   // APB4 slave for management // 
+   // ------------------------- //
+   input  logic [APB_ADD_W -1:0] mng_apb4_s_paddr   ,
+   input  logic [3         -1:0] mng_apb4_s_pprot   , 
+   input  logic                  mng_apb4_s_psel    ,
+   input  logic                  mng_apb4_s_penable ,
+   input  logic                  mng_apb4_s_pwrite  ,
+   input  logic [APB_DAT_W -1:0] mng_apb4_s_pwdata  ,
+   input  logic [APB_STRB_W-1:0] mng_apb4_s_pstrb   ,
+   input  logic                  mng_apb4_s_pwakeup ,
+   output logic                  mng_apb4_s_pready  ,
+   output logic [APB_DAT_W -1:0] mng_apb4_s_prdata  ,
+   output logic                  mng_apb4_s_pslverr ,
+
+   // Exceptions //
+   // ---------- //
+   output logic                  exc_evnt_agg       , // an aggregation of all CPU exceptions
+
    // -------------------- Main Memory Interface ---------------------- // 
    // ----------------------------------------------------------------- //
    // Input control // 
    // ------------- //
-   output logic          main_mem_cs      , // Chip-select 
-   output logic          main_mem_wen     , // Write enable
-   output logic [32-1:0] main_mem_addr    , // Address  
+   output logic                  main_mem_cs        , // Chip-select 
+   output logic                  main_mem_wen       , // Write enable
+   output logic [32-1:0]         main_mem_addr      , // Address  
    // Input data // 
    // ---------- //
-   output logic [32-1:0] main_mem_dat_in  , // Input data (from memory POV)
+   output logic [32-1:0]         main_mem_dat_in    , // Input data (from memory POV)
    // Output data // 
    // ----------- //
-   input  logic [32-1:0] main_mem_dat_out , // Output data (from memory POV)
-   // ----------------------------------------------------------------- //
+   input  logic [32-1:0]         main_mem_dat_out   , // Output data (from memory POV)
+
    // ------------ Instruction Memory Read Interface ------------------ // 
    // ----------------------------------------------------------------- //
    // Input control // 
    // ------------- //
-   output logic [32-1:0] inst_mem_addr    , // Address  
+   output logic [32-1:0]         inst_mem_addr      , // Address  
    // Output data // 
    // ----------- //
-   input  logic [32-1:0] inst_mem_dat_out   // Output data (from memory POV)
+   input  logic [32-1:0]         inst_mem_dat_out     // Output data (from memory POV)
 );
 
 // Internal Wires //
 // -------------- //
+// Configurations //
+logic [32-1:0] cfg_trap_hdlr_addr      ;
+// Events // 
+logic          exc_inst_addr_mis       ; 
+logic          exc_inst_addr_oob       ;
+logic          exc_main_addr_mis       ;
+logic          exc_main_addr_oob       ;
 // IF --> IF // 
 logic [32-1:0] pc_next                 ; 
 // IF --> ID //
@@ -101,24 +136,31 @@ logic [32-1:0] id2ex_branch_nt_pc ;
 
 // Fetch Stage // 
 // ----------- //
-fetch_top i_fetch_top (
+fetch_top #(.INST_MEM_BYTE_ADD_W(INST_MEM_BYTE_ADD_W)) i_fetch_top (
+   // Configurations //
+   .cfg_trap_hdlr_addr (cfg_trap_hdlr_addr      ), // i, 32  X logic  , congifurable trap handler base address
    // Program Counter Register // 
-   .pc              (pc                      ), // i, 32  X logic  , Program counter value
-   .pc_next         (pc_next                 ), // o, 32  X logic  , Program counter next value
+   .pc                 (pc                      ), // i, 32  X logic  , Program counter value
+   .pc_next            (pc_next                 ), // o, 32  X logic  , Program counter next value
    // Instruction Register // 
-   .id_inst         (if2id_inst_next         ), // o, 32  X logic  , Decode stage instruction
+   .id_inst            (if2id_inst_next         ), // o, 32  X logic  , Decode stage instruction
    // Pipe interlock bubble //
-   .intrlock_bubble (intrlock_bubble         ), // i, [1] X logic  , bubble due to pipe interlock                
+   .intrlock_bubble    (intrlock_bubble         ), // i, [1] X logic  , bubble due to pipe interlock                
    // Branch Flush IF //
-   .id_branch_taken (if2id_branch_taken_next ),
-   .id_branch_nt_pc (if2id_branch_nt_pc_next ),
-   .ex_branch_flush (branch_flush            ),
-   .ex_branch_pc    (branch_flush_pc         ),
+   .id_branch_taken    (if2id_branch_taken_next ),
+   .id_branch_nt_pc    (if2id_branch_nt_pc_next ),
+   .ex_branch_flush    (branch_flush            ),
+   .ex_branch_pc       (branch_flush_pc         ),
+   // Events // 
+   .exc_main_addr_mis  (exc_main_addr_mis       ), // i, [1] X logic , exception - main memory address misaligned
+   .exc_main_addr_oob  (exc_main_addr_oob       ), // i, [1] X logic , exception - main memory address out-of-bounds
+   .exc_inst_addr_mis  (exc_inst_addr_mis       ), // o, [1] X logic  , exception - instruction address misaligned
+   .exc_inst_addr_oob  (exc_inst_addr_oob       ), // o, [1] X logic  , exception - instruction address out-of-bounds
    // ------------------------ Memory Interface ----------------------- // 
    // Input control // 
-   .mem_addr        (inst_mem_addr           ), // o, 32  X logic  , Address
+   .mem_addr          (inst_mem_addr           ), // o, 32  X logic  , Address
    // Output data // 
-   .mem_dat_out     (inst_mem_dat_out        )  // i, 32  X logic  , Output data (from memory POV)
+   .mem_dat_out       (inst_mem_dat_out        )  // i, 32  X logic  , Output data (from memory POV)
 );
 
 // Decode Stage //
@@ -188,35 +230,38 @@ execute_top i_execute_top (
 
 // Memory Access Stage //
 // ------------------- //
-memory_access_top i_memory_access_top (
+memory_access_top #(.MAIN_MEM_BYTE_ADD_W(MAIN_MEM_BYTE_ADD_W)) i_memory_access_top (
    // Input from execute stage // 
-   .ex_pc       (ex2ma_pc         ), // i, 32         X logic  , Input pc
-   .ex_inst     (ex2ma_inst       ), // i, 32         X logic  , Output instruction
-   .ex_dat      (ex2ma_dat        ), // i, 32         X logic  , ALU output data
-   .ex_rd2      (ex2ma_rd2        ), // i, 32         X logic  , Address for store operations
+   .ex_pc             (ex2ma_pc         ), // i, 32         X logic  , Input pc
+   .ex_inst           (ex2ma_inst       ), // i, 32         X logic  , Output instruction
+   .ex_dat            (ex2ma_dat        ), // i, 32         X logic  , ALU output data
+   .ex_rd2            (ex2ma_rd2        ), // i, 32         X logic  , Address for store operations
    // Output to write back stage // 
-   .wb_dat      (ma2wb_dat_next   ), // o, 32         X logic  , writeback data
-   .wb_inst     (ma2wb_inst_next  ), // o, 32         X logic  , writeback instruction
-   .wb_pc       (ma2wb_pc_next    ), // o, 32         X logic  , Output pc
+   .wb_dat            (ma2wb_dat_next   ), // o, 32         X logic  , writeback data
+   .wb_inst           (ma2wb_inst_next  ), // o, 32         X logic  , writeback instruction
+   .wb_pc             (ma2wb_pc_next    ), // o, 32         X logic  , Output pc
    // Memory Access Forwarding //
-   .id_fwd_we   (ma2id_fwd_we     ), // i, [1] X logic  , forwarded write enable from memory access stage
-   .id_fwd_dst  (ma2id_fwd_dst    ), // i,  5  X logic  , forwarded destination register from memory access stage
-   .id_fwd_dat  (ma2id_fwd_dat    ), // i, 32  X logic  , forwarded data from memory access stage
+   .id_fwd_we         (ma2id_fwd_we     ), // i, [1] X logic  , forwarded write enable from memory access stage
+   .id_fwd_dst        (ma2id_fwd_dst    ), // i,  5  X logic  , forwarded destination register from memory access stage
+   .id_fwd_dat        (ma2id_fwd_dat    ), // i, 32  X logic  , forwarded data from memory access stage
+   // Events // 
+   .exc_main_addr_mis (exc_main_addr_mis), // o, [1] X logic , exception - main memory address misaligned
+   .exc_main_addr_oob (exc_main_addr_oob), // o, [1] X logic , exception - main memory address out-of-bounds
    // ------------------------ Memory Interface ----------------------- // 
    // Input control // 
-   .mem_cs      (main_mem_cs      ), // o, [1]        X logic  , Chip-select
-   .mem_wen     (main_mem_wen     ), // o, [1]        X logic  , Write enable
-   .mem_addr    (main_mem_addr    ), // o, MEM_ADDR_W X logic  , Address
+   .mem_cs            (main_mem_cs      ), // o, [1]        X logic  , Chip-select
+   .mem_wen           (main_mem_wen     ), // o, [1]        X logic  , Write enable
+   .mem_addr          (main_mem_addr    ), // o, MEM_ADDR_W X logic  , Address
    // Input data // 
-   .mem_dat_in  (main_mem_dat_in  ), // o, 32         X logic  , Input data (from memory POV)
+   .mem_dat_in        (main_mem_dat_in  ), // o, 32         X logic  , Input data (from memory POV)
    // Output dat // 
-   .mem_dat_out (main_mem_dat_out )  // i, 32         X logic  , Output data (from memory POV)
+   .mem_dat_out       (main_mem_dat_out )  // i, 32         X logic  , Output data (from memory POV)
 );
 
 // FFs // 
 // --- //
 // PC register //
-always_ff @(posedge clk) if (!rst_n) pc                 <=    0 ;                                                       else pc <= pc_next[$clog2(INST_MEM_DEPTH)+2-1:0]   ; 
+always_ff @(posedge clk) if (!rst_n) pc                 <=    0 ;                                                       else pc <= 32'(pc_next[INST_MEM_BYTE_ADD_W-1:0])   ; 
 // PC value always takes the LSbits of pc_next determined by INST_MEM_DEPTH
 // parameter. This is done to allow working with smaller instruction address
 // space thus saving test time
@@ -242,6 +287,40 @@ always_ff @(posedge clk) if (!rst_n) ex2ma_dat          <=    0 ;               
 always_ff @(posedge clk) if (!rst_n) ma2wb_pc           <=    0 ;                                                       else ma2wb_pc           <= ma2wb_pc_next           ; 
 always_ff @(posedge clk) if (!rst_n) ma2wb_inst         <=    0 ;                                                       else ma2wb_inst         <= ma2wb_inst_next         ; 
 always_ff @(posedge clk) if (!rst_n) ma2wb_dat          <=    0 ;                                                       else ma2wb_dat          <= ma2wb_dat_next          ; 
+
+// Management registers //
+// -------------------- // 
+etcpu_mng_regs i_etcpu_mng_regs ( 
+   // General // 
+   // ------- //
+   .clk   (clk   ),
+   .rst_n (rst_n ),
+   
+   // HW IF to RGF // 
+   // ------------ //
+   .etcpu_mng_regs_cfg_trap_hdlr_addr        (cfg_trap_hdlr_addr ), // etcpu_mng_regs_cfg_trap_hdlr_addr: HW read port     , output(32b)
+   .etcpu_mng_regs_exc_inst_addr_mis_hw_next (exc_inst_addr_mis  ), // etcpu_mng_regs_exc_inst_addr_mis: HW write port     , input(1b)
+   .etcpu_mng_regs_exc_inst_addr_oob_hw_next (exc_inst_addr_oob  ), // etcpu_mng_regs_exc_inst_addr_oob: HW write port     , input(1b)
+   .etcpu_mng_regs_exc_main_addr_mis_hw_next (exc_main_addr_mis  ), // etcpu_mng_regs_exc_main_addr_mis: HW write port     , input(1b)
+   .etcpu_mng_regs_exc_main_addr_oob_hw_next (exc_main_addr_oob  ), // etcpu_mng_regs_exc_main_addr_oob: HW write port     , input(1b)
+   .etcpu_mng_regs_epc_val_hw_next           (pc                 ), // etcpu_mng_regs_epc_val: HW write port , input(32b)
+   .etcpu_mng_regs_epc_val_hw_we             (exc_evnt_agg       ), // etcpu_mng_regs_epc_val: HW write enable bit , input(1b)
+   .etcpu_mng_regs___intr                    (exc_evnt_agg       ), // etcpu_mng_regs__intr: agrregation of CPU exceptions , output(1b)
+
+   // APB IF // 
+   // ------ //
+   .paddr   (mng_apb4_s_paddr   ),
+   .pprot   (mng_apb4_s_pprot   ),
+   .psel    (mng_apb4_s_psel    ),
+   .penable (mng_apb4_s_penable ),
+   .pwrite  (mng_apb4_s_pwrite  ),
+   .pwdata  (mng_apb4_s_pwdata  ),
+   .pstrb   (mng_apb4_s_pstrb   ),
+   .pwakeup (mng_apb4_s_pwakeup ),
+   .pready  (mng_apb4_s_pready  ),
+   .prdata  (mng_apb4_s_prdata  ),
+   .pslverr (mng_apb4_s_pslverr )
+);
 
 endmodule
 

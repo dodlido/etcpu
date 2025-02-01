@@ -74,7 +74,7 @@ async def close_test(dut, cpu_rst, max_runtime, mem_depth):
             break
         await RisingEdge(dut.clk)
 
-# @cocotb.test()
+@cocotb.test()
 async def test_basic(dut):
     '''
     basic test:
@@ -95,7 +95,7 @@ async def test_basic(dut):
     await inst_driver._driver_send('lw x4, 4(x2)')
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth)
 
-# @cocotb.test()
+@cocotb.test()
 async def test_data_hazard(dut):
     '''
     test RAW data hazard case:
@@ -107,7 +107,7 @@ async def test_data_hazard(dut):
     await inst_driver._driver_send('addi x1, x1, 4')
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth)
 
-# @cocotb.test()
+@cocotb.test()
 async def test_interlock_scenario(dut):
     '''
     test pipe interlock scenario:
@@ -125,7 +125,7 @@ async def test_interlock_scenario(dut):
     await inst_driver._driver_send('add x3, x2, x2')
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth)
 
-# @cocotb.test()
+@cocotb.test()
 async def test_jal(dut):
     '''
     test jal instruction:
@@ -142,7 +142,7 @@ async def test_jal(dut):
     await inst_driver._driver_send('addi x17, x0, 137') # 0x20
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth)
 
-# @cocotb.test()
+@cocotb.test()
 async def test_jalr(dut):
     '''
     test jalr instruction:
@@ -161,7 +161,7 @@ async def test_jalr(dut):
     await inst_driver._driver_send('addi x17, x0, 137') # 0x24
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth)
 
-# @cocotb.test()
+@cocotb.test()
 async def test_bne(dut):
     '''
     test jalr instruction:
@@ -182,7 +182,7 @@ async def test_bne(dut):
     await inst_driver._driver_send('addi x17, x0, 137') # 0x24
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth)
 
-# @cocotb.test()
+@cocotb.test()
 async def test_srai(dut):
     '''
     test srai direct test:
@@ -196,7 +196,7 @@ async def test_srai(dut):
     await inst_driver._driver_send('srai x22, x24, 0')
     await close_test(dut, cpu_rst, 300, inst_driver.inst_mem_depth)
 
-# @cocotb.test()
+@cocotb.test()
 async def test_srl(dut):
     '''
     test srai direct test:
@@ -210,7 +210,7 @@ async def test_srl(dut):
     await inst_driver._driver_send('srl x11, x27, x10')
     await close_test(dut, cpu_rst, 300, inst_driver.inst_mem_depth)
 
-@cocotb.test()
+# @cocotb.test()
 async def test_rand_inst(dut):
     '''
     test rand_inst:

@@ -2,26 +2,34 @@
 // memory_access_top.v 
 //
 
-module memory_access_top 
-(
+module memory_access_top #(
+   // Parameters //
+   // ---------- //
+   parameter MAIN_MEM_BYTE_ADD_W = 8 // Byte address width of main memory [bits]
+)(
    // Input from execute stage // 
    // ------------------------ //
-   input  logic [32-1:0] ex_pc     , // Input pc
-   input  logic [32-1:0] ex_inst   , // Output instruction 
-   input  logic [32-1:0] ex_dat    , // ALU output data
-   input  logic [32-1:0] ex_rd2    , // Address for store operations
+   input  logic [32-1:0] ex_pc              , // Input pc
+   input  logic [32-1:0] ex_inst            , // Output instruction 
+   input  logic [32-1:0] ex_dat             , // ALU output data
+   input  logic [32-1:0] ex_rd2             , // Address for store operations
 
    // Output Forwarding IF to Decode //
    // ------------------------------ //
-   output logic          id_fwd_we  , // Forwarded write-enable signal
-   output logic [ 5-1:0] id_fwd_dst , // Forwarded pointer to destination register
-   output logic [32-1:0] id_fwd_dat , // Forwarded data from ALU output
+   output logic          id_fwd_we          , // Forwarded write-enable signal
+   output logic [ 5-1:0] id_fwd_dst         , // Forwarded pointer to destination register
+   output logic [32-1:0] id_fwd_dat         , // Forwarded data from ALU output
 
    // Output to write back stage // 
    // -------------------------- //
-   output logic [32-1:0] wb_dat    , // writeback data
-   output logic [32-1:0] wb_inst   , // writeback instruction
-   output logic [32-1:0] wb_pc     , // Output pc
+   output logic [32-1:0] wb_dat             , // writeback data
+   output logic [32-1:0] wb_inst            , // writeback instruction
+   output logic [32-1:0] wb_pc              , // Output pc
+
+   // Events //
+   // ------ //
+   output logic          exc_main_addr_mis  , // exception - main memory address misaligned
+   output logic          exc_main_addr_oob  , // exception - main memory address out-of-bounds
 
    // ----------------------------------------------------------------- //
    // ------------------------ Memory Interface ----------------------- // 
@@ -78,6 +86,11 @@ assign mem_dat_in = ex_rd2      ;
 assign id_fwd_we = ~(wb_inst[6:0]==OP_STORE | wb_inst[6:0]==OP_BRANCH) ; 
 assign id_fwd_dst = wb_inst[11:7] ; 
 assign id_fwd_dat = wb_dat ; 
+
+// Exceptions logic // 
+// ---------------- //
+assign exc_main_addr_mis = mem_wen & (|(mem_addr[1:0])) ; 
+assign exc_main_addr_oob = mem_wen & (|(mem_addr[32-1:MAIN_MEM_BYTE_ADD_W])) ; 
 
 endmodule
 
