@@ -196,6 +196,25 @@ class PCScoreboard(Scoreboard):
             return False
         return True
 
+class EXCScoreboard(Scoreboard):
+    def __init__(self, name):
+        depth = 5
+        name = name.ljust(16)
+        super().__init__(depth, name)
+    def compare(self):
+        actual_trns = self.actual_trns.pop(0)
+        if len(self.expected_trns)<1:
+            cocotb.log.error(f'{self.name.ljust(16)} EXCEPTION FOUND and not expected')
+            return False
+        expected_trns = self.expected_trns.pop(0)
+        if (expected_trns == actual_trns and actual_trns):
+            cocotb.log.info(f"{self.name.ljust(16)} EXCEPTION FOUND as predicted")
+            return True
+        elif (expected_trns!=actual_trns):
+            cocotb.log.error(f"{self.name.ljust(16)} EXCEPTION MISMATCH!! predicted {expected_trns} but got {actual_trns}")
+            return False
+        return True
+
 class RGFMonitor(Monitor):
     '''
     Register file writes monitor:
@@ -286,13 +305,50 @@ class MMMonitor(BusMonitor):
                 self._recv(trans)
             await RisingEdge(self.clock)
 
+class EXCMonitor(Monitor):
+    '''
+    Exceptions monitor:
+        1. Listens to exception triggers on the IF stage
+    '''
+    def __init__(self, clock, reset_n, act_exc, exc_sb: EXCScoreboard, log_level, callback=None, event=None):
+        super().__init__(callback, event)
+        self.clock = clock
+        self.reset_n = reset_n
+        self.act = act_exc
+        self.sb = exc_sb
+        self.log.setLevel(log_level)
+        self.title = (self.sb.name.rstrip()[:-2] + 'M').ljust(16)
+    
+    async def _monitor_recv(self):
+        while True:
+            await ReadOnly()
+            if self.reset_n.value!=0:
+                if bool(self.act.value):
+                    self.log.warning(f'{self.title} exception triggered')
+            self._recv(self.act.value)
+            await RisingEdge(self.clock)
+
+async def update_exc(clock, mon: EXCMonitor, exc: bool, delay: bool=False)->bool:
+    mon.sb.add_expected(exc)
+    if delay:
+        await ClockCycles(clock, 4)
+    mon.sb.add_actual(bool(mon.act.value))
+    equal = mon.sb.compare()
+    if not equal:
+        await ClockCycles(clock, 5)
+        assert False
+    return bool(mon.act.value)
+
 class PCMonitor(Monitor):
     '''
     Program counter monitor:
         1. Listens to program counter and instruction from DUT
         2. Logs valid instructions
     '''
-    def __init__(self, clock, rst_n, pc, inst, inst_mem_depth, intrlock, pc_scoreboard: PCScoreboard, rgf_scoreboard: RGFScoreboard, mm_scoreboard: MMScoreboard, log_level, callback=None, event=None):
+    def __init__(self, clock, rst_n, pc, inst, inst_mem_depth, intrlock, trap_base,
+                  pc_scoreboard: PCScoreboard, rgf_scoreboard: RGFScoreboard, mm_scoreboard: MMScoreboard,
+                  inst_mis_mon: EXCMonitor, inst_oob_mon: EXCMonitor, main_mis_mon: EXCMonitor, main_oob_mon: EXCMonitor, 
+                    log_level, callback=None, event=None):
         super().__init__(callback, event)
         self.clock = clock
         self.rst_n = rst_n
@@ -302,7 +358,12 @@ class PCMonitor(Monitor):
         self.pc_scoreboard = pc_scoreboard
         self.rgf_scoreboard = rgf_scoreboard
         self.mm_scoreboard = mm_scoreboard
+        self.inst_mis_mon = inst_mis_mon 
+        self.inst_oob_mon = inst_oob_mon
+        self.main_mis_mon = main_mis_mon
+        self.main_oob_mon = main_oob_mon
         self.intrlock = intrlock
+        self.trap_base = trap_base 
         self.title = 'PCM'.ljust(16)
         self.log.setLevel(log_level)
     
@@ -310,6 +371,7 @@ class PCMonitor(Monitor):
         while True:
             await ReadOnly()
             if self.rst_n.value!=0:
+                # Log current instruction
                 curr_inst_str = inst_int2str(int(self.inst.value))
                 if curr_inst_str!='nop':
                     padded_inst_str = curr_inst_str.ljust(31)
@@ -320,7 +382,7 @@ class PCMonitor(Monitor):
                 if not equal:
                     await ClockCycles(self.clock, 5)
                     assert False
-                next_pc, flush = inst_int2pcexp(
+                next_pc, flush, exc_inst_mis, exc_inst_oob = inst_int2pcexp(
                     int(self.inst.value), self.rgf_scoreboard.expected_state, self.pc_scoreboard.expected_pc, int(self.intrlock.value), self.inst_mem_depth)
                 # TODO: this assumes that the pipe interlock implementation is correct
                 # and does not try to predict whether a pipe interlock is required
@@ -334,15 +396,21 @@ class PCMonitor(Monitor):
                     self.rgf_scoreboard.expected_state = expected_rgf_next_state.copy()
                 
                 # Main memory Scoreboard update
-                expected_mm_wen, expected_mm_wa, expected_mm_wd, expected_mm_next_state = inst_int2mmexp(
+                expected_mm_wen, expected_mm_wa, expected_mm_wd, expected_mm_next_state, exc_main_mis, exc_main_oob = inst_int2mmexp(
                     int(self.inst.value), self.rgf_scoreboard.expected_state, self.mm_scoreboard.expected_state)
                 if expected_mm_wen:
                     mm_wr_trans = MMTrans(expected_mm_wd, expected_mm_wa)
                     self.mm_scoreboard.add_expected(mm_wr_trans)
                     self.mm_scoreboard.expected_state = expected_mm_next_state.copy()
                 
+                # update expected exception predictions
+                cocotb.start_soon(update_exc(self.clock, self.inst_mis_mon, exc_inst_mis))
+                cocotb.start_soon(update_exc(self.clock, self.inst_oob_mon, exc_inst_oob))
+                cocotb.start_soon(update_exc(self.clock, self.main_mis_mon, exc_main_mis, True))
+                cocotb.start_soon(update_exc(self.clock, self.main_oob_mon, exc_main_oob, True))
+                trap = bool(self.inst_mis_mon.act.value) or bool(self.inst_oob_mon.act.value) or bool(self.main_mis_mon.act.value) or bool(self.main_oob_mon.act.value)
                 # update program counter
-                self.pc_scoreboard.expected_pc = next_pc
+                self.pc_scoreboard.expected_pc = int(self.trap_base.value) if trap else next_pc 
                 # If flush, don't monitor the next 2 instructions as they should be flushed
                 if flush: 
                    await ClockCycles(self.clock, 2) 

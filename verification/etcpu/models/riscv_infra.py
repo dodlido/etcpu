@@ -587,7 +587,7 @@ def inst_int2rgfexp(cmd_int: int, rgf_state: List[int], mm_state: List[int], nex
         rgf_next_state[wa] = wd
     return wen, wa, wd, rgf_next_state
 
-def inst_int2mmexp(cmd_int: int, rgf_state: List[int], mm_state: List[int])->Tuple[bool, int, int, List[int]]:
+def inst_int2mmexp(cmd_int: int, rgf_state: List[int], mm_state: List[int])->Tuple[bool, int, int, List[int], bool, bool]:
     '''
     This function gets lists of the current RGF and main memory states and a RV32I command and returns:
         1. wen (bool) - write-enable signal
@@ -595,31 +595,45 @@ def inst_int2mmexp(cmd_int: int, rgf_state: List[int], mm_state: List[int])->Tup
         3. wd (int) - memory write data
         4. mm_next_state (List[int]) - next state of the main memory as a result of the write
     '''
+    exc_main_oob, exc_main_mis = False, False
     inst_bin_arr = int_to_binary_array(cmd_int)
     opcode = binary_array_to_int(inst_bin_arr[2:7])
     rs1 = binary_array_to_int(inst_bin_arr[15:20])
     rs2 = binary_array_to_int(inst_bin_arr[20:25])
     stype_imm = binary_array_to_int_reversed_2s_complement(inst_bin_arr[7:12] + inst_bin_arr[25:])
+    itype_imm = binary_array_to_int_reversed_2s_complement(inst_bin_arr[20:])
     mm_next_state = mm_state.copy() 
     
     # update the output write interface and mem next state
     wa = (rgf_state[rs1] + stype_imm)
     wd = rgf_state[rs2]
-    wen = 1 if opcode==8 else 0
+    wen = 1 if opcode==8 and (wa % 4==0) else 0
     if wen:
         virt_addr = wa >> 2
         mm_next_state[virt_addr] = wd 
    
-    return wen, wa, wd, mm_next_state
+    # Predict exceptions
+    if opcode==8 and (wa%4!=0):
+        exc_main_mis = True
+    if opcode==8 and ((wa>>2) > len(mm_state)):
+        exc_main_oob = True
+    load_wa = rgf_state[rs1] + itype_imm
+    if opcode==0 and (load_wa%4!=0):
+        exc_main_mis = True
+    if opcode==0 and ((load_wa>>2) > len(mm_state)):
+        exc_main_oob = True
 
-def inst_int2pcexp(cmd_int: int, rgf_state: List[int], curr_pc: int, intrlock: int, mem_depth: int)->Tuple[int, bool]:
+    return wen, wa, wd, mm_next_state, exc_main_mis, exc_main_oob
+
+def inst_int2pcexp(cmd_int: int, rgf_state: List[int], curr_pc: int, intrlock: int, mem_depth: int)->Tuple[int, bool, bool, bool]:
     '''
     This function gets lists of the current RGF and main memory states and a RV32I command and returns:
         1. next_pc (int) - next program counter value
         2. flush (bool) - True if the expected branch prediction should fail and a flush should occur
     '''
+    exc_inst_mis, exc_inst_oob = False, False
     if intrlock==1:
-        return curr_pc, False
+        return curr_pc, False, False, False
     jtype, btype = 27, 24
     inst_bin_arr = int_to_binary_array(cmd_int)
     opcode = binary_array_to_int(inst_bin_arr[2:7])
@@ -670,9 +684,15 @@ def inst_int2pcexp(cmd_int: int, rgf_state: List[int], curr_pc: int, intrlock: i
         next_pc = curr_pc + 4 
         flush = False
     
+    # predict exceptions
+    if ((next_pc+4)>>2) > mem_depth:
+        exc_inst_oob = True
+    if ((next_pc+4) % 4 != 0):
+        exc_inst_mis = True
+
     next_pc = next_pc % (mem_depth << 2)
 
-    return next_pc, flush
+    return next_pc, flush, exc_inst_mis, exc_inst_oob
 
 class InstGenerator:
     def __init__(self):
@@ -715,7 +735,7 @@ class InstGenerator:
         self.p.addConstraint(lambda op, i: i<2**12 
                              if op in opcode_dict['itype'] or op in opcode_dict['stype'] or op in opcode_dict['btype']
                              else True, ['opcode', 'imm']) # I,S,B type instructions have only 12 bits for immediate
-        self.p.addConstraint(lambda op, i: (i%4)==0 and i!=0 if op==25 or op==27 or op==24 else True, ['opcode', 'imm']) # JALR, JAL, Branches immediate divisble by 4
+        self.p.addConstraint(lambda op, i: (i%4)==0 and i!=0 if op==0 or op==8 or op==25 or op==27 or op==24 else True, ['opcode', 'imm']) # JALR, JAL, Branches immediate divisble by 4
         self.p.addConstraint(lambda op, f3: f3==0 if op==25 or op==27 else True, ['opcode', 'funct3']) # JALR, JAL funct3 is 0
         self.p.addConstraint(lambda op, f3, i: i<2**5 if op==4 and f3==5 else True, ['opcode', 'funct3', 'imm'])
         

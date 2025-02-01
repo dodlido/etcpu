@@ -77,7 +77,7 @@ assign wb_pc = ex_pc ;
 // Memory interface //
 // ---------------- //
 assign mem_cs     = 1'b1        ; 
-assign mem_wen    = mem_wen_int ; 
+assign mem_wen    = mem_wen_int & ~(exc_main_addr_mis | exc_main_addr_oob) ; 
 assign mem_addr   = ex_dat      ; 
 assign mem_dat_in = ex_rd2      ; 
 
@@ -89,8 +89,8 @@ assign id_fwd_dat = wb_dat ;
 
 // Exceptions logic // 
 // ---------------- //
-assign exc_main_addr_mis = mem_wen & (|(mem_addr[1:0])) ; 
-assign exc_main_addr_oob = mem_wen & (|(mem_addr[32-1:MAIN_MEM_BYTE_ADD_W])) ; 
+assign exc_main_addr_mis = (mem_wen_int | wb_sel_mem) & (|(mem_addr[1:0])) ; 
+assign exc_main_addr_oob = (mem_wen_int | wb_sel_mem) & (|(mem_addr[32-1:MAIN_MEM_BYTE_ADD_W])) ; 
 
 endmodule
 
