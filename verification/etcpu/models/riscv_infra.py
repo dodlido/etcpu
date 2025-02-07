@@ -1,4 +1,3 @@
-
 from typing import Tuple, List
 from math import floor
 import constraint
@@ -503,7 +502,7 @@ def inst_int2rgfexp(cmd_int: int, rgf_state: List[int], mm_state: List[int], nex
     # Itype Instruction
     elif opcode in itype:
         imm = binary_array_to_int_reversed_2s_complement(inst_bin_arr[20:])
-        shift_imm = binary_array_to_int_reversed_2s_complement(inst_bin_arr[20:25])
+        shift_imm = binary_array_to_int(inst_bin_arr[20:25])
         wen = True
         if opcode==4: # register-immediate calculations
             if funct3==i_addi['funct3']:
@@ -539,7 +538,7 @@ def inst_int2rgfexp(cmd_int: int, rgf_state: List[int], mm_state: List[int], nex
             byte_addr = rgf_state[rs1] + imm
             word_addr = byte_addr >> 2 
             wen = (byte_addr % 4 == 0) and (word_addr  < len(mm_state))
-            word = mm_state[word_addr]
+            word = mm_state[word_addr] if wen else 0
             if funct3==i_lb['funct3']:
                 byte = word % (2**8)
                 wd = byte
@@ -609,11 +608,7 @@ def inst_int2mmexp(cmd_int: int, rgf_state: List[int], mm_state: List[int])->Tup
     # update the output write interface and mem next state
     wa = (rgf_state[rs1] + stype_imm)
     wd = rgf_state[rs2]
-    wen = 1 if opcode==8 and (wa % 4==0) else 0
-    if wen:
-        virt_addr = wa >> 2
-        mm_next_state[virt_addr] = wd 
-   
+       
     # Predict exceptions
     if opcode==8 and (wa%4!=0):
         exc_main_mis = True
@@ -624,6 +619,11 @@ def inst_int2mmexp(cmd_int: int, rgf_state: List[int], mm_state: List[int])->Tup
         exc_main_mis = True
     if opcode==0 and ((load_wa>>2) > len(mm_state)):
         exc_main_oob = True
+
+    wen = 1 if opcode==8 and (not exc_main_mis) and (not exc_main_oob) else 0
+    if wen:
+        virt_addr = wa >> 2
+        mm_next_state[virt_addr] = wd 
 
     return wen, wa, wd, mm_next_state, exc_main_mis, exc_main_oob
 
@@ -696,76 +696,73 @@ def inst_int2pcexp(cmd_int: int, rgf_state: List[int], curr_pc: int, intrlock: i
 
     return next_pc, flush, exc_inst_mis, exc_inst_oob
 
-class InstGenerator:
-    def __init__(self):
-        self.solutions = None
-        self.p = constraint.Problem()
-        self.p.addVariable('opcode', (opcode_dict['btype'] + opcode_dict['itype'] + opcode_dict['jtype'] 
-                            + opcode_dict['rtype'] + opcode_dict['stype'])) # bits 6:2 of opcode TODO: add utype after finishing rgfexp implementation
-        self.p.addVariable('rd', range(0,32))
-        self.p.addVariable('funct3', range(0,8))
-        self.p.addVariable('rs1', range(0,32))
-        self.p.addVariable('rs2', range(0,32))
-        self.p.addVariable('funct7', [0,32])
-        self.p.addVariable('imm', range(0,2**4)) 
-        # TODO: Immediates are small to accelarate the solve process
-        #   1. Consider how to keep the range relativly small but get to edge cases later
-        #   2. Consider addign another variable that is the immediate sign bit to check negative immediates
-        self.p.addConstraint(lambda op, rd: rd==0 # B and S types have no RD
-                             if op in opcode_dict['btype'] or op in opcode_dict['stype'] 
-                             else True, ['opcode', 'rd']) 
-        self.p.addConstraint(lambda op, f3: f3==0 # U and J type have no funct3
-                             if op in opcode_dict['utype'] or op in opcode_dict['jtype'] 
-                             else True, ['opcode', 'funct3']) 
-        self.p.addConstraint(lambda op, rs1: rs1==0 # U and J type have no rs1
-                             if op in opcode_dict['utype'] or op in opcode_dict['jtype'] 
-                             else True, ['opcode', 'rs1']) 
-        self.p.addConstraint(lambda op, rs2: rs2==0 # U, I and J type have no rs1
-                             if op in opcode_dict['utype'] or op in opcode_dict['jtype']  or op in opcode_dict['itype']
-                             else True, ['opcode', 'rs2']) 
-        self.p.addConstraint(lambda op, f3, f7: f7==0 if not 
-                             (op in opcode_dict['itype'] and f3==5 or # select between srli and srai
-                              op in opcode_dict['rtype'] and (f3==0 or f3==5)) # special cases are sub and sra
-                              else True, ['opcode', 'funct3', 'funct7'])
-        self.p.addConstraint(lambda op, f3: f3 < 6 and f3 != 3 if op==0 
-                             else True, ['opcode', 'funct3']) # load commands have no 6,7 and no 3 funct3 value
-        self.p.addConstraint(lambda op, f3: f3<3 if op==8 
-                             else True, ['opcode', 'funct3']) # store commands have no funct3 values < 3
-        self.p.addConstraint(lambda op, f3: f3!=2 and f3!=3 if op in opcode_dict['btype']
-                             else True, ['opcode', 'funct3']) # branch commands have no 2, 3 funct3 value
-        self.p.addConstraint(lambda op, i: i==0 if op in opcode_dict['rtype'] else True, ['opcode', 'imm']) # Rtype no immmediate
-        self.p.addConstraint(lambda op, i: i<2**12 
-                             if op in opcode_dict['itype'] or op in opcode_dict['stype'] or op in opcode_dict['btype']
-                             else True, ['opcode', 'imm']) # I,S,B type instructions have only 12 bits for immediate
-        self.p.addConstraint(lambda op, i: (i%4)==0 and i!=0 if op==0 or op==8 or op==25 or op==27 or op==24 else True, ['opcode', 'imm']) # JALR, JAL, Branches immediate divisble by 4
-        self.p.addConstraint(lambda op, f3: f3==0 if op==25 or op==27 else True, ['opcode', 'funct3']) # JALR, JAL funct3 is 0
-        self.p.addConstraint(lambda op, f3, i: i<2**5 if op==4 and f3==5 else True, ['opcode', 'funct3', 'imm'])
-        
-    def solve(self):
-        self.solutions = self.p.getSolutions()
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
-    def get(self):
-        s = random.choice(self.solutions)
-        
-        imm = s['imm']
-        t, rd, r1, r2, f3, f7 = s['opcode'], s['rd'], s['rs1'], s['rs2'], s['funct3'], s['funct7']
-        i = 3 + (t << 2) + (rd << 7) + (f3 << 12) + (r1 << 15) + (r2 << 20) + (f7 << 25)
-        if t in opcode_dict['btype']:
-            imm_type = 'btype'
-        elif t in opcode_dict['itype']:
-            imm_type = 'itype'
-        elif t in opcode_dict['jtype']:
-            imm_type = 'jtype'
-        elif t in opcode_dict['rtype']:
-            imm_type = 'itype' # this is anyways constrained to 0
-        elif t in opcode_dict['stype']:
-            imm_type = 'stype'
-        elif t in opcode_dict['utype']:
-            imm_type = 'utype'
+def get_rand_inst(opcode_probs: dict, avoid_exceptions: bool=True, running_addr: int=0, inst_mem_depth: int=0x100, main_mem_depth: int=0x100):
+    '''
+    Generate a random instruction
+    '''
+    running_addr = running_addr >> 2
+    # 0. choose opcode
+    opcode_types = ['itype', 'rtype', 'store', 'load', 'jalr', 'jal', 'btype']
+    op_type = random.choices(opcode_types, weights=[opcode_probs[opcode_type] for opcode_type in opcode_types], k=1)[0]  
+    if op_type=='store':
+        op = 8 
+    elif op_type=='load':
+        op = 0 
+    elif op_type=='jalr':
+        op = 25 
+    elif op_type=='jal':
+        op = 27
+    elif op_type=='itype':
+        op = 4
+    else:
+        op = random.choice(opcode_dict[op_type])
+    # 1. randomize RD
+    rd = 0 if op in opcode_dict['btype'] or op in opcode_dict['stype'] else random.randint(0,31)
+    # 2. randomize RS1
+    rs1 = 0 if op in opcode_dict['utype'] or op in opcode_dict['jtype'] or ((op==0 or op==8 or op==25) and avoid_exceptions) else random.randint(0,31)
+    # 3. randomize RS2 
+    rs2 = 0 if op in opcode_dict['utype'] or op in opcode_dict['jtype']  or op in opcode_dict['itype'] else random.randint(0,31)
+    # 4. randomize FUNCT3
+    if op in opcode_dict['utype'] or op in opcode_dict['jtype'] or op==25 or op==27:
+        f3 = 0 
+    elif op_type=='load': 
+        f3 = random.choice([i for i in range(0,6) if i not in [3]]) 
+    elif op_type=='store':
+        f3 = random.randint(0,2)
+    elif op in opcode_dict['btype']: 
+        f3 = random.choice([i for i in range(0,6) if i not in [2,3]]) 
+    else:
+        f3 = random.randint(0,8)
+    # 5. randomize FUNCT7
+    f7 = 0 if not (op in opcode_dict['itype'] and f3==5 or op in opcode_dict['rtype'] and (f3==0 or f3==5)) else random.choice([0,32]) 
+    # 6. Randomize IMM
+    if op in opcode_dict['btype']:
+        imm = (((random.randint(1, max((inst_mem_depth-running_addr) >> 2, 2))) << 2)) if avoid_exceptions else ((random.randint(0, 2**12-1)) << 1)
+        imm_type = 'btype'
+    elif op in opcode_dict['itype']:
+        if op==0:
+            imm = random.randint(0, main_mem_depth >> 2) << 2 if avoid_exceptions else random.randint(0, 2**12-1)
+        elif op==25:
+            imm = ((random.randint(1, max((inst_mem_depth-running_addr) >> 2, 2))) << 2) if avoid_exceptions else ((random.randint(0, 2**20-1)) << 1)
         else:
-            print(f'solver returned an unknown opcode {t}')
-            exit(1)
-        inst_int = add_imm(imm_type, imm, i, special_itype=(t==4 and f3==5))
-        inst_str = inst_int2str(inst_int)
-        return inst_int, inst_str
-        
+            imm = random.randint(0, 2**5-1) if f3==1 or f3==5 else random.randint(0, 2**12-1)
+        imm_type = 'itype'
+    elif op in opcode_dict['jtype']:
+        imm = ((random.randint(1, max((inst_mem_depth-running_addr) >> 2, 2))) << 2) if avoid_exceptions else ((random.randint(0, 2**20-1)) << 1)
+        imm_type = 'jtype'
+    elif op in opcode_dict['rtype']:
+        imm = 0 
+        imm_type = 'itype' # this is anyways constrained to 0
+    elif op in opcode_dict['stype']:
+        imm = random.randint(0, main_mem_depth >> 2) << 2 if avoid_exceptions else random.randint(0, 2**11-1) << 1
+        imm_type = 'stype'
+    elif op in opcode_dict['utype']:
+        imm = random.randint(0, 2**20-1) << 12
+        imm_type = 'utype'
+    else:
+        print(f'solver returned an unknown opcode {op}')
+        exit(1)  
+    i = 3 + (op << 2) + (rd << 7) + (f3 << 12) + (rs1 << 15) + (rs2 << 20) + (f7 << 25)
+    inst_int = add_imm(imm_type, imm, i, special_itype=(op==4 and f3==5))
+    inst_str = inst_int2str(inst_int)
+    return inst_int, inst_str

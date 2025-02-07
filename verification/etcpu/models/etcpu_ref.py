@@ -1,10 +1,11 @@
 import cocotb.log
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles, ReadOnly
+import cocotb.utils
 from cocotb_bus.bus import Bus
 from cocotb_bus.drivers import BusDriver
 from cocotb_bus.monitors import BusMonitor, Monitor
-from models.riscv_infra import inst_str2int, inst_int2str, inst_int2rgfexp, inst_int2mmexp, inst_int2pcexp, InstGenerator
+from models.riscv_infra import inst_str2int, inst_int2str, inst_int2rgfexp, inst_int2mmexp, inst_int2pcexp, get_rand_inst
 import logging
 
 class RGFTrans(object):
@@ -61,63 +62,6 @@ class IMTrans(object):
     def get_log_message(self)->str:
         log_inst = f"{self.inst_str}".ljust(20)
         return f' : {log_inst}                                     @ {hex(self.address)}'
-
-class IMDriver(BusDriver):
-    '''
-    Instruction write driver
-        * gets an instruction
-        * keeps internal running address
-        * drives the instruction memory write interface
-    '''
-    _signals = ['wen', 'addr', 'dat']
-
-    def __init__(self, entity, name, clock, inst_mem_depth, **kwargs):
-        super().__init__(entity, name, clock, **kwargs)
-        self.running_addr = 0 
-        self.inst_mem_depth = inst_mem_depth
-        self.bus.wen.value = 0 
-        self.bus.addr.value = 0
-        self.bus.dat.value = 0 
-        self.inst_generator = InstGenerator()
-        self.inst_generator.solve()
-
-    async def _driver_send(self, cmd: str, sync = True):
-        '''
-        gets an RV32I command as a string
-        drives the command write bus to the instruction memory        
-        '''
-        # Build the transaction
-        trans = IMTrans(cmd, self.running_addr)
-        
-        # Drive IM with the transaction
-        self.bus.wen.value = 1 
-        self.bus.addr.value = trans.address
-        self.bus.dat.value = trans.inst_int
-        # Update running address
-        self.running_addr = 0 if ((self.running_addr + 4) >> 2) == self.inst_mem_depth else self.running_addr + 4 
-
-        # Wait for the next clock and disable WEN
-        await RisingEdge(self.clock)
-        self.bus.wen.value = 0
-    
-    async def drive_rand_inst(self):
-        '''
-        drive a random valid RV32I instruction
-        '''
-        _, rand_inst = self.inst_generator.get()
-        await self._driver_send(rand_inst)
-
-    async def _load_nops(self, num_of_nops: int):
-        '''
-            use num_of_nops=-1 to load the 
-            entire instruction memory with nops
-        '''
-        if num_of_nops == -1:
-            for _ in range(self.inst_mem_depth):
-                await self._driver_send('nop')
-        else:
-            for _ in range(num_of_nops):
-                await self._driver_send('nop')
 
 class Scoreboard:
     '''
@@ -189,6 +133,64 @@ class RGFScoreboard(Scoreboard):
         super().add_expected(trans)
     def compare(self):
         return super().compare()
+
+class IMDriver(BusDriver):
+    '''
+    Instruction write driver
+        * gets an instruction
+        * keeps internal running address
+        * drives the instruction memory write interface
+    '''
+    _signals = ['wen', 'addr', 'dat']
+
+    def __init__(self, entity, name, clock, inst_mem_depth, main_mem_depth, opcode_probs, avoid_exceptions, **kwargs):
+        super().__init__(entity, name, clock, **kwargs)
+        self.running_addr = 0 
+        self.bus.wen.value = 0 
+        self.bus.addr.value = 0
+        self.bus.dat.value = 0
+        self.inst_mem_depth = inst_mem_depth
+        self.main_mem_depth = main_mem_depth 
+        self.opcode_probs = opcode_probs
+        self.avoid_exceptions = avoid_exceptions
+
+    async def _driver_send(self, cmd: str, sync = True):
+        '''
+        gets an RV32I command as a string
+        drives the command write bus to the instruction memory        
+        '''
+        # Build the transaction
+        trans = IMTrans(cmd, self.running_addr)
+        
+        # Drive IM with the transaction
+        self.bus.wen.value = 1 
+        self.bus.addr.value = trans.address
+        self.bus.dat.value = trans.inst_int
+        # Update running address
+        self.running_addr = 0 if ((self.running_addr + 4) >> 2) == self.inst_mem_depth else self.running_addr + 4 
+
+        # Wait for the next clock and disable WEN
+        await RisingEdge(self.clock)
+        self.bus.wen.value = 0
+    
+    async def drive_rand_inst(self):
+        '''
+        drive a random valid RV32I instruction
+        '''
+        _, rand_inst_str = get_rand_inst(self.opcode_probs, self.avoid_exceptions, self.running_addr, self.inst_mem_depth, self.main_mem_depth)
+        await self._driver_send(rand_inst_str)
+
+    async def _load_nops(self, num_of_nops: int):
+        '''
+            use num_of_nops=-1 to load the 
+            entire instruction memory with nops
+        '''
+        if num_of_nops == -1:
+            for _ in range(self.inst_mem_depth):
+                await self._driver_send('nop')
+        else:
+            for _ in range(num_of_nops):
+                await self._driver_send('nop')
 
 class PCScoreboard(Scoreboard):
     '''
@@ -340,13 +342,13 @@ class EXCMonitor(Monitor):
 async def update_exc(clock, mon: EXCMonitor, exc: bool, delay: bool=False)->bool:
     mon.sb.add_expected(exc)
     if delay:
-        await ClockCycles(clock, 4)
+        await ClockCycles(clock, 3)
+    await ReadOnly()
     mon.sb.add_actual(bool(mon.act.value))
     equal = mon.sb.compare()
     if not equal:
         await ClockCycles(clock, 5)
         assert False
-    return bool(mon.act.value)
 
 class PCMonitor(Monitor):
     '''
@@ -412,17 +414,20 @@ class PCMonitor(Monitor):
                     self.mm_scoreboard.add_expected(mm_wr_trans)
                     self.mm_scoreboard.expected_state = expected_mm_next_state.copy()
                 
+                # If flush, don't monitor the next 2 instructions as they should be flushed
+                if flush: 
+                   await ClockCycles(self.clock, 2) 
+
                 # update expected exception predictions
+                await ReadOnly()
                 cocotb.start_soon(update_exc(self.clock, self.inst_mis_mon, exc_inst_mis))
                 cocotb.start_soon(update_exc(self.clock, self.inst_oob_mon, exc_inst_oob))
                 cocotb.start_soon(update_exc(self.clock, self.main_mis_mon, exc_main_mis, True))
                 cocotb.start_soon(update_exc(self.clock, self.main_oob_mon, exc_main_oob, True))
-                trap = bool(self.inst_mis_mon.act.value) or bool(self.inst_oob_mon.act.value) or bool(self.main_mis_mon.act.value) or bool(self.main_oob_mon.act.value)
+                
                 # update program counter
+                trap = bool(self.inst_mis_mon.act.value) or bool(self.inst_oob_mon.act.value) or bool(self.main_mis_mon.act.value) or bool(self.main_oob_mon.act.value)
                 self.pc_scoreboard.expected_pc = int(self.trap_base.value) if trap else next_pc 
-                # If flush, don't monitor the next 2 instructions as they should be flushed
-                if flush: 
-                   await ClockCycles(self.clock, 2) 
                 
             await RisingEdge(self.clock)
 

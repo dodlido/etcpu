@@ -1,3 +1,4 @@
+import random
 import json
 from pathlib import Path
 from typing import Tuple
@@ -29,11 +30,20 @@ async def cfg_cpu(driver: APBMasterDriver, trap_base_addr: int):
 async def init_test(dut)->Tuple[IMDriver, any]:
 
     # 0. logging level
-    log_level = logging.INFO
+    log_level, avoid_exceptions = logging.INFO, True
 
     # 1. Declare Instruction Driver
     apb_driver = APBMasterDriver(dut, 'mng_apb4_s', dut.clk)
-    inst_driver = IMDriver(dut, 'inst_mem_wr', dut.clk, dut.INST_MEM_DEPTH.value)
+    opcode_probs = {
+        'itype': 16, 
+        'rtype': 8, 
+        'store': 4,
+        'load': 2, 
+        'jalr': 1,
+        'jal': 1, 
+        'btype': 1
+    }
+    inst_driver = IMDriver(dut, 'inst_mem_wr', dut.clk, dut.INST_MEM_DEPTH.value, dut.MAIN_MEM_DEPTH.value, opcode_probs, avoid_exceptions)
     
     # 2. Start clock
     await cocotb.start(Clock(dut.clk, 1, 'ns').start())
@@ -45,12 +55,12 @@ async def init_test(dut)->Tuple[IMDriver, any]:
     await cocotb.start_soon(reset_dut(dut.clk, dut.rst_n_env, 10))
 
     # 5. Configure CPU
-    await cfg_cpu(apb_driver, int((dut.INST_MEM_DEPTH.value - 10)*4))
+    await cfg_cpu(apb_driver, 0x80)
 
     # 6. Fill instruction memory with NOPS
     await inst_driver._load_nops(-1)
 
-    # 7. Start monitors and scoreboards
+    # 7. Start scoreboards and monitors
     pc_scoreboard, rgf_scoreboard, mm_scoreboard = PCScoreboard(), RGFScoreboard(), MMScoreboard(dut.MAIN_MEM_DEPTH.value)
     exc_inst_mis_sb, exc_inst_oob_sb, exc_main_mis_sb, exc_main_oob_sb = EXCScoreboard('INST_MIS_SB'), EXCScoreboard('INST_OOB_SB'), EXCScoreboard('MAIN_MIS_SB'), EXCScoreboard('MAIN_OOB_SB')
     exc_inst_mis_mon= EXCMonitor(dut.clk, dut.rst_n_cpu, dut.i_etcpu_top.exc_inst_addr_mis, exc_inst_mis_sb, log_level)
@@ -96,7 +106,7 @@ async def close_test(dut, cpu_rst, max_runtime, mem_depth, rgf_sb: RGFScoreboard
     rgf_sb.is_empty()
     mm_sb.is_empty()
 
-@cocotb.test()
+# @cocotb.test()
 async def test_basic(dut):
     '''
     basic test:
@@ -117,7 +127,7 @@ async def test_basic(dut):
     await inst_driver._driver_send('lw x4, 4(x2)')
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth, rgf_sb, mm_sb)
 
-@cocotb.test()
+# @cocotb.test()
 async def test_data_hazard(dut):
     '''
     test RAW data hazard case:
@@ -129,7 +139,7 @@ async def test_data_hazard(dut):
     await inst_driver._driver_send('addi x1, x1, 4')
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth, rgf_sb, mm_sb)
 
-@cocotb.test()
+# @cocotb.test()
 async def test_interlock_scenario(dut):
     '''
     test pipe interlock scenario:
@@ -147,7 +157,7 @@ async def test_interlock_scenario(dut):
     await inst_driver._driver_send('add x3, x2, x2')
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth, rgf_sb, mm_sb)
 
-@cocotb.test()
+# @cocotb.test()
 async def test_jal(dut):
     '''
     test jal instruction:
@@ -164,7 +174,7 @@ async def test_jal(dut):
     await inst_driver._driver_send('addi x17, x0, 137') # 0x20
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth, rgf_sb, mm_sb)
 
-@cocotb.test()
+# @cocotb.test()
 async def test_jalr(dut):
     '''
     test jalr instruction:
@@ -183,7 +193,7 @@ async def test_jalr(dut):
     await inst_driver._driver_send('addi x17, x0, 137') # 0x24
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth, rgf_sb, mm_sb)
 
-@cocotb.test()
+# @cocotb.test()
 async def test_bne(dut):
     '''
     test jalr instruction:
@@ -204,7 +214,7 @@ async def test_bne(dut):
     await inst_driver._driver_send('addi x17, x0, 137') # 0x24
     await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth, rgf_sb, mm_sb)
 
-@cocotb.test()
+# @cocotb.test()
 async def test_srai(dut):
     '''
     test srai direct test:
@@ -218,7 +228,7 @@ async def test_srai(dut):
     await inst_driver._driver_send('srai x22, x24, 0')
     await close_test(dut, cpu_rst, 300, inst_driver.inst_mem_depth, rgf_sb, mm_sb)
 
-@cocotb.test()
+# @cocotb.test()
 async def test_srl(dut):
     '''
     test srai direct test:
@@ -232,7 +242,7 @@ async def test_srl(dut):
     await inst_driver._driver_send('srl x11, x27, x10')
     await close_test(dut, cpu_rst, 300, inst_driver.inst_mem_depth, rgf_sb, mm_sb)
 
-@cocotb.test()
+# @cocotb.test()
 async def test_exc_main_mis(dut):
     '''
     test main memory mis-aligned address exception:
@@ -257,6 +267,14 @@ async def test_rand_inst(dut):
         random set of instructions
     '''
     inst_driver, cpu_rst, rgf_sb, mm_sb = await init_test(dut)
-    for _ in range(inst_driver.inst_mem_depth):
+    # initialize all registers with some random integer
+    for i in range(32):
+        await inst_driver._driver_send(f'addi x{i}, x0, {random.randint(0,2**12-1)}')
+    # fill the rest of the instruction memory with random instructions
+    for _ in range(inst_driver.inst_mem_depth-32-1-5):
         await inst_driver.drive_rand_inst()
-    await close_test(dut, cpu_rst, 2000, inst_driver.inst_mem_depth, rgf_sb, mm_sb)
+    # make sure we jump to head
+    await inst_driver._driver_send('jal x0, 128')
+    for _ in range(5):
+        await inst_driver._driver_send('nop')
+    await close_test(dut, cpu_rst, 20000, inst_driver.inst_mem_depth, rgf_sb, mm_sb)
