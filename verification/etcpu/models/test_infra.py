@@ -90,13 +90,13 @@ async def close_test(dut, cpu_rst, max_runtime, mem_depth, rgf_sb: RGFScoreboard
     # 1. Kill the test after some time or edge of instruction memory reached
     for _ in range(max_runtime):
         if dut.inst_mem_rd_addr.value==((mem_depth << 2)-4):
-            cocotb.logging.shutdown()
             break
         await RisingEdge(dut.clk)
     
     # 2. Lock scoreboards from adding new expected transactions
     rgf_sb.lock_expected = True
     mm_sb.lock_expected = True
+    cocotb.log.info('Test Manage       : Locking Scoreboards')
 
     # 3. Wait for actual remaining transactions to propagate
     await ClockCycles(dut.clk, 4)
@@ -104,3 +104,5 @@ async def close_test(dut, cpu_rst, max_runtime, mem_depth, rgf_sb: RGFScoreboard
     # 4. Make sure that all scoreboards are empty
     rgf_sb.is_empty()
     mm_sb.is_empty()
+
+    cocotb.logging.shutdown()

@@ -614,12 +614,16 @@ def inst_int2mmexp(cmd_int: int, rgf_state: List[int], mm_state: List[int])->Tup
         exc_main_mis = True
     if opcode==8 and ((wa>>2) > len(mm_state)):
         exc_main_oob = True
+    if opcode==8 and wa<0:
+        exc_main_oob = True
     load_wa = rgf_state[rs1] + itype_imm
     if opcode==0 and (load_wa%4!=0):
         exc_main_mis = True
     if opcode==0 and ((load_wa>>2) > len(mm_state)):
         exc_main_oob = True
-
+    if opcode==0 and load_wa<0:
+        exc_main_oob = True
+    
     wen = 1 if opcode==8 and (not exc_main_mis) and (not exc_main_oob) else 0
     if wen:
         virt_addr = wa >> 2
@@ -741,9 +745,9 @@ def get_rand_inst(opcode_probs: dict, avoid_exceptions: bool=True, running_addr:
         imm_type = 'btype'
     elif op in opcode_dict['itype']:
         if op==0:
-            imm = random.randint(0, main_mem_depth >> 2) << 2 if avoid_exceptions else random.randint(0, 2**12-1)
+            imm = random.randint(0, main_mem_depth >> 3) << 2 if avoid_exceptions else random.randint(0, 2**12-1)
         elif op==25:
-            imm = ((random.randint(1, max((inst_mem_depth-running_addr) >> 2, 2))) << 2) if avoid_exceptions else ((random.randint(0, 2**20-1)) << 1)
+            imm = ((random.randint(1, max((inst_mem_depth-running_addr) >> 3, 2))) << 2) if avoid_exceptions else ((random.randint(0, 2**20-1)) << 1)
         else:
             imm = random.randint(0, 2**5-1) if f3==1 or f3==5 else random.randint(0, 2**12-1)
         imm_type = 'itype'
@@ -754,7 +758,7 @@ def get_rand_inst(opcode_probs: dict, avoid_exceptions: bool=True, running_addr:
         imm = 0 
         imm_type = 'itype' # this is anyways constrained to 0
     elif op in opcode_dict['stype']:
-        imm = random.randint(0, main_mem_depth >> 2) << 2 if avoid_exceptions else random.randint(0, 2**11-1) << 1
+        imm = random.randint(0, main_mem_depth >> 3) << 2 if avoid_exceptions else random.randint(0, 2**11-1) << 1
         imm_type = 'stype'
     elif op in opcode_dict['utype']:
         imm = random.randint(0, 2**20-1) << 12
