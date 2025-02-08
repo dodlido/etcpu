@@ -29,13 +29,13 @@
 
 ## Environment Description
 
-1. Directed at a [wrapper](./design/etcpu/rtl/etcpu_top.v) containing:
+1. Directed at a [wrapper](./design/etcpu/rtl/etcpu_env_top.v) containing:
    1. Instance of the core
    2. Instruction memory
    3. General memory
 2. Written in python utilizig the cocotb framework
 3. Easy to write tests in assembly-like psuedo-code:
-        '''python3
+        ```python3
         import cocotb
         from models.test_infra import init_test, close_test
 
@@ -50,7 +50,7 @@
             await inst_driver._driver_send('addi x1, x0, 7') # actual instruction #1
             await inst_driver._driver_send('addi x1, x1, 4') # actual instruction #2
             await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth, rgf_sb, mm_sb) # Generic closing phase
-        '''
+        ```
 4. Support for random test with several simulation arguments options:
    1. Number of instructions in test
    2. Probabilities of each instruction type
