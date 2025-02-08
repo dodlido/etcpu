@@ -35,22 +35,22 @@
    3. General memory
 2. Written in python utilizig the cocotb framework
 3. Easy to write tests in assembly-like psuedo-code:
-        ```python3
-        import cocotb
-        from models.test_infra import init_test, close_test
+   ```python
+   import cocotb
+   from models.test_infra import init_test, close_test
 
-        @cocotb.test()
-        async def test_data_hazard(dut):
-            '''
-            test RAW data hazard case:
-                1. addi x1, x0, 7 
-                2. addi x1, x1, 4
-            '''
-            inst_driver, cpu_rst, rgf_sb, mm_sb = await init_test(dut) # Generic initialization phase
-            await inst_driver._driver_send('addi x1, x0, 7') # actual instruction #1
-            await inst_driver._driver_send('addi x1, x1, 4') # actual instruction #2
-            await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth, rgf_sb, mm_sb) # Generic closing phase
-        ```
+   @cocotb.test()
+   async def test_data_hazard(dut):
+       '''
+       test RAW data hazard case:
+           1. addi x1, x0, 7 
+           2. addi x1, x1, 4
+       '''
+       inst_driver, cpu_rst, rgf_sb, mm_sb = await init_test(dut) # Generic initialization phase
+       await inst_driver._driver_send('addi x1, x0, 7') # actual instruction #1
+       await inst_driver._driver_send('addi x1, x1, 4') # actual instruction #2
+       await close_test(dut, cpu_rst, 30, inst_driver.inst_mem_depth, rgf_sb, mm_sb) # Generic closing phase
+   ```
 4. Support for random test with several simulation arguments options:
    1. Number of instructions in test
    2. Probabilities of each instruction type
