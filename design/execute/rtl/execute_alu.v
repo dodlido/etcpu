@@ -45,6 +45,8 @@ logic [32-1:0] mask_itype_sra    ;
 logic [32-1:0] mask_itype_or     ; 
 logic [32-1:0] mask_itype_and    ; 
 logic [32-1:0] mask_itype        ;
+// U-type Mask //
+logic [32-1:0] mask_utype        ; 
 // Calculations //
 logic [32-1:0] res_add           ;
 logic [32-1:0] res_sub           ;
@@ -62,6 +64,7 @@ logic [32-1:0] res_btype         ;
 logic [32-1:0] res_itype         ; 
 logic [32-1:0] res_stype         ; 
 logic [32-1:0] res_jtype         ; 
+logic [32-1:0] res_utype         ; 
 
 // Calculate all the possible results //
 // ---------------------------------- //
@@ -135,13 +138,16 @@ assign res_stype = ( res_add ) ;
 
 assign res_jtype = ( res_add ) ; 
 
+assign res_utype = ( res_add ) ; 
+
 // Create instruction type masks // 
 // ----------------------------- //
 assign mask_rtype = {32{opcode==OP_RR}} ;
 assign mask_jtype = {32{opcode==OP_JAL | opcode==OP_JALR}} ; 
 assign mask_btype = {32{opcode==OP_BRANCH}} ;
 assign mask_stype = {32{opcode==OP_STORE | opcode==OP_LOAD}} ; 
-assign mask_itype = {32{(opcode==OP_LUI | opcode==OP_AUIPC | opcode==OP_IMM)}} ;
+assign mask_itype = {32{opcode==OP_IMM}} ;
+assign mask_utype = {32{(opcode==OP_LUI | opcode==OP_AUIPC)}} ;
 
 // Create the final result //
 // ----------------------- //
@@ -149,6 +155,7 @@ assign y = ( mask_rtype & res_rtype ) |
            ( mask_btype & res_btype ) | 
            ( mask_stype & res_stype ) | 
            ( mask_jtype & res_jtype ) | 
+           ( mask_utype & res_utype ) | 
            ( mask_itype & res_itype ) ; 
 
 endmodule

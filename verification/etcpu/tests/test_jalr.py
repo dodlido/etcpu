@@ -1,7 +1,7 @@
 import cocotb
 from models.test_infra import init_test, close_test
 
-# @cocotb.test()
+@cocotb.test()
 async def test_jalr(dut):
     '''
     test jalr instruction:

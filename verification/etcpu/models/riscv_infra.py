@@ -259,7 +259,7 @@ def add_imm(imm_type: str, param_value: str, running_sum: int, special_itype: bo
         imm = (imm_11 << 7) + (imm_4_1 << 8) + (imm_10_5 << 25)
     elif imm_type=='utype':
         param_abs = twos_complement_to_int(int_to_twos_complement(param_int, 32))
-        imm = floor(param_abs / (2**12))
+        imm = (param_abs % (2**20)) << 12
     else: # jtype 
         param_abs = twos_complement_to_int(int_to_twos_complement(param_int, 21))
         imm_19_12, imm_11_0 = floor(param_abs / (2**12)), param_abs % (2**12)
@@ -430,7 +430,7 @@ def inst_int2str(cmd_int: int)->str:
         return inst_str + f'x{rs1}, x{rs2}, {imm}'
     # Utype inst
     elif opcode in utype:
-        imm = binary_array_to_int_reversed_2s_complement([0,0,0,0,0,0,0,0,0,0,0,0] + inst_bin_arr[12:])
+        imm = binary_array_to_int_reversed_2s_complement(inst_bin_arr[12:])
         if opcode==i_lui['opcode']:
             return f'lui x{rd}, {imm}'
         elif opcode==i_auipc['opcode']:
@@ -567,8 +567,13 @@ def inst_int2rgfexp(cmd_int: int, rgf_state: List[int], mm_state: List[int], nex
         wd = next_pc
     # Utype Instruction
     elif opcode in utype:
-        print('Utype is not supported yet because I am lazy')
-        exit(1)
+        imm = binary_array_to_int_reversed_2s_complement([0]*12 + inst_bin_arr[12:])
+        if opcode==13: # lui
+            wen = True
+            wd = imm 
+        elif opcode==5: # auipc
+            wen = True
+            wd = imm + next_pc - 4 
     # Stype or Btype Instructions - no RGF write
     elif opcode in stype or opcode in btype:
         wen = False
@@ -601,13 +606,17 @@ def inst_int2mmexp(cmd_int: int, rgf_state: List[int], mm_state: List[int])->Tup
     opcode = binary_array_to_int(inst_bin_arr[2:7])
     rs1 = binary_array_to_int(inst_bin_arr[15:20])
     rs2 = binary_array_to_int(inst_bin_arr[20:25])
+    f3 = binary_array_to_int(inst_bin_arr[12:15])
     stype_imm = binary_array_to_int_reversed_2s_complement(inst_bin_arr[7:12] + inst_bin_arr[25:])
     itype_imm = binary_array_to_int_reversed_2s_complement(inst_bin_arr[20:])
     mm_next_state = mm_state.copy() 
     
     # update the output write interface and mem next state
     wa = (rgf_state[rs1] + stype_imm)
-    wd = rgf_state[rs2]
+    word = rgf_state[rs2]
+    half = word % (2**16)
+    byte = word % (2**8) 
+    wd = word if f3==2 else (half if f3==1 or f3==5 else byte)
        
     # Predict exceptions
     if opcode==8 and (wa%4!=0):
@@ -666,19 +675,25 @@ def inst_int2pcexp(cmd_int: int, rgf_state: List[int], curr_pc: int, intrlock: i
         if funct3==i_beq['funct3']:
             branch_actually_taken = (rgf_state[rs1]==rgf_state[rs2])
         elif funct3==i_bge['funct3']:
-            branch_actually_taken = (rgf_state[rs1]>=rgf_state[rs2])
+            if rs1_signbit==rs2_signbit:
+                branch_actually_taken = (rgf_state[rs1]>=rgf_state[rs2])
+            else:
+                branch_actually_taken = bool(rs2_signbit)
         elif funct3==i_bgeu['funct3']:
             if rs1_signbit==rs2_signbit:
-                branch_actually_taken = True if (rs1_abs_val >= rs2_abs_val) else False 
+                branch_actually_taken = rs1_abs_val >= rs2_abs_val
             else:
-                branch_actually_taken = True if rs1_signbit==0 else False 
+                branch_actually_taken = bool(rs1_signbit)
         elif funct3==i_blt['funct3']:
-            branch_actually_taken = (rgf_state[rs1]<rgf_state[rs2])
+            if rs1_signbit==rs2_signbit:
+                branch_actually_taken = (rgf_state[rs1]<rgf_state[rs2])
+            else:
+                branch_actually_taken = bool(rs1_signbit)
         elif funct3==i_bltu['funct3']:
             if rs1_signbit==rs2_signbit:
-                branch_actually_taken = True if (rs1_abs_val < rs2_abs_val) else False 
+                branch_actually_taken = rs1_abs_val < rs2_abs_val
             else:
-                branch_actually_taken = True if rs1_signbit==1 else False 
+                branch_actually_taken = bool(rs2_signbit)
         elif funct3==i_bne['funct3']:
             branch_actually_taken = (rgf_state[rs1]!=rgf_state[rs2])
         else:

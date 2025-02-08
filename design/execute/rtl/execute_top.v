@@ -74,7 +74,7 @@ assign ex_branch_pc = inst_jalr ? ma_dat : id_branch_nt_pc ;
 // -------------------------- //
 assign id_fwd_we = ~(id_inst[6:0]==OP_STORE | id_inst[6:0]==OP_BRANCH) ; 
 assign id_fwd_dst = id_inst[11:7] ; 
-assign id_fwd_dat = ma_dat ; 
+assign id_fwd_dat = id_inst[6:0]==OP_JAL | id_inst[6:0]==OP_JALR ? id_pc + 4 : ma_dat ; 
 
 // Drive outputs //
 // ------------- //

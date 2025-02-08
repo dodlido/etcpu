@@ -175,7 +175,7 @@ assign intrlock_bubble = ex_load & (ex_fwd_dst!=5'h0) & ((rd1_re & ex_fwd_dst==r
 // --------------------- // 
 assign ex_inst   = ex_branch_flush | intrlock_bubble ? BUBBLE : inst ; 
 assign ex_pc     = if_pc   ; 
-assign ex_dat_a  = fwd_rd1 ;  
+assign ex_dat_a  = (opcode==OP_AUIPC) ? ex_pc : fwd_rd1 ;  
 assign ex_dat_b  = (opcode==OP_RR | opcode==OP_BRANCH) ? fwd_rd2 : imm ; 
 assign ex_rd2    = fwd_rd2 ; 
 
