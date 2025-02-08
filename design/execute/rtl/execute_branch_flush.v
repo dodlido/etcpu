@@ -28,3 +28,12 @@ assign br_act = funct3==ALU_BGEU | funct3==ALU_BGE ?    ~alu_dat_out[0] : // BGE
 assign flush = inst_jalr | (inst_branch & (br_pred ^ br_act)) ;
 
 endmodule
+
+//|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|//
+//|                                               |//
+//| 1. Project  :  etcpu                          |//
+//| 2. Author   :  Etay Sela                      |//
+//| 3. Date     :  2025-02-08                     |//
+//| 4. Version  :  v1.0.0                         |//
+//|                                               |//
+//|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|//
